@@ -82,7 +82,6 @@ function preload() {
     this.load.image('audiR8', 'assets/images/audiR8.png');
     this.load.image('tree', 'assets/images/tree.png');
     this.load.image('backgroundSky', 'assets/images/sky.png');
-    // --- MODIFICATION: Changed 'sign' to 'stone' ---
     this.load.image('stone', 'assets/images/stone.png');
     console.log("Preload function complete.");
 }
@@ -98,7 +97,7 @@ function create() {
 
     cursors = this.input.keyboard.createCursorKeys();
     roadGraphics = this.add.graphics();
-    roadGraphics.setDepth(1); // Road, grass, and rumbles are drawn here
+    roadGraphics.setDepth(1);
 
     score = 0;
     scoreText = this.add.text(16, 16, 'Score: 0', {
@@ -132,7 +131,8 @@ function create() {
         roadSegments.push({
             index: i, z: i * segmentLength, curve: 0, hill: 0,
             color: (Math.floor(i / 10) % 2 === 0) ? 0x888888 : 0x777777,
-            rumbleColor: isRumbler ? 0xFFFFFF : 0xDD0000,
+            // --- MODIFICATION: Rumble strip color changed to white/grey ---
+            rumbleColor: isRumbler ? 0xFFFFFF : 0xCCCCCC, // Was 0xDD0000 (red)
             grassColor1: (Math.floor(i / 3) % 2 === 0) ? grassColor : 0x005000,
             grassColor2: (Math.floor(i / 3) % 2 === 0) ? 0x005A00 : grassColor
         });
@@ -148,12 +148,10 @@ function create() {
     const numInitialObjects = Math.floor((drawDistance + 50) / 2.5);
     for (let i = 0; i < numInitialObjects ; i++) {
          const side = (Math.random() > 0.5 ? 1 : -1);
-         // --- MODIFICATION: Changed 'sign' to 'stone' ---
          const isStone = Math.random() > 0.5;
          const spriteKey = isStone ? 'stone' : 'tree';
-         let initialObjScale = 0.3 + Math.random() * 0.4; // Default for tree
-         // --- MODIFICATION: Scale for stone (formerly sign) ---
-         if (isStone) initialObjScale = 0.03 + Math.random() * 0.04; // Keep stone small
+         let initialObjScale = 0.3 + Math.random() * 0.4;
+         if (isStone) initialObjScale = 0.03 + Math.random() * 0.04;
 
          const newSprite = this.add.sprite(0, 0, spriteKey).setVisible(false).setDepth(50).setOrigin(0.5, 1);
          newSprite.setData('activeForCollision', true);
@@ -252,16 +250,14 @@ function update(time, delta) {
                         treeSprite.x - trunkWidth / 2, treeSprite.y - trunkHeight,
                         trunkWidth, trunkHeight
                     );
-                } else { // For stones (formerly signs) and other objects
+                } else { 
                     objectCollisionBounds = obj.sprite.getBounds();
-                     // Optional: Make collision box for stones smaller too if needed
                     if (obj.spriteKey === 'stone') {
-                        objectCollisionBounds.width *= 0.8; // Example: 80% of original width
-                        objectCollisionBounds.height *= 0.6; // Example: 60% of original height
-                        // Recenter bounds if necessary after scaling
+                        objectCollisionBounds.width *= 0.8; 
+                        objectCollisionBounds.height *= 0.6; 
                         const stoneSprite = obj.sprite;
                         objectCollisionBounds.centerX = stoneSprite.x;
-                        objectCollisionBounds.centerY = stoneSprite.y - (stoneSprite.displayHeight * (1-0.6) /2) ; // Adjust Y if origin is 0.5,1
+                        objectCollisionBounds.centerY = stoneSprite.y - (stoneSprite.displayHeight * (1-0.6) /2) ; 
                     }
                 }
                 if (Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, objectCollisionBounds)) {
@@ -298,7 +294,8 @@ function update(time, delta) {
 
         const isRumbler = Math.floor(oldSegment.index / 5) % 2 === 0;
         oldSegment.color = (Math.floor(oldSegment.index / 10) % 2 === 0) ? 0x888888 : 0x777777;
-        oldSegment.rumbleColor = isRumbler ? 0xFFFFFF : 0xDD0000;
+        // --- MODIFICATION: Rumble strip color changed to white/grey ---
+        oldSegment.rumbleColor = isRumbler ? 0xFFFFFF : 0xCCCCCC; // Was 0xDD0000 (red)
         oldSegment.grassColor1 = (Math.floor(oldSegment.index / 3) % 2 === 0) ? grassColor : 0x005000;
         oldSegment.grassColor2 = (Math.floor(oldSegment.index / 3) % 2 === 0) ? 0x005A00 : grassColor;
         roadSegments.push(oldSegment);
@@ -315,11 +312,9 @@ function update(time, delta) {
 
             obj.worldZ = maxZ + segmentLength + (Math.random() * segmentLength * 4);
             obj.worldX = (Math.random() > 0.5 ? 1 : -1) * (1.5 + Math.random() * 3.5);
-            // --- MODIFICATION: Changed 'sign' to 'stone' ---
             const isStone = Math.random() > 0.5;
             obj.spriteKey = isStone ? 'stone' : 'tree';
             obj.sprite.setTexture(obj.spriteKey);
-            // --- MODIFICATION: Scale for stone (formerly sign) ---
             if (isStone) obj.initialScale = 0.03 + Math.random() * 0.04;
             else obj.initialScale = 0.3 + Math.random() * 0.4;
             obj.sprite.setVisible(false);
