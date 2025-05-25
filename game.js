@@ -8,7 +8,7 @@ const config = {
     scale: {
         mode: Phaser.Scale.FIT, // Or Phaser.Scale.RESIZE, or Phaser.Scale.ENVELOP
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        parent: 'phaser-game-container', // Optional: if you have a specific div for the game
+        // parent: 'phaser-game-container', // Optional: if you have a specific div for the game
     },
     physics: {
         default: 'arcade',
@@ -104,7 +104,8 @@ function create() {
 
 
     playerCar = this.add.sprite(this.cameras.main.width / 2, this.cameras.main.height - 80, 'audiR8');
-    playerCar.setScale(0.125);
+    // --- MODIFICATION: Car scale reduced by 50% ---
+    playerCar.setScale(0.0625); // Was 0.125
     playerCar.setDepth(100);
 
     cursors = this.input.keyboard.createCursorKeys();
@@ -137,6 +138,9 @@ function create() {
 
     restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
 
+    // Initialize Road Segments
+    // roadSegments array is populated here
+    // Clear roadSegments array first in case create is called multiple times without full page reload
     roadSegments = [];
     for (let i = 0; i < drawDistance + 50; i++) {
         const isRumbler = Math.floor(i / 5) % 2 === 0;
@@ -149,10 +153,13 @@ function create() {
         });
     }
 
+
+    // Initialize Roadside Objects (sprites are created here)
+    // Clear array first in case create is called multiple times without full page reload
     while(roadsideObjects.length) {
         const objToDestroy = roadsideObjects.pop();
         if (objToDestroy.sprite) {
-            objToDestroy.sprite.destroy();
+            objToDestroy.sprite.destroy(); // Properly destroy Phaser sprites
         }
     }
 
@@ -169,37 +176,12 @@ function create() {
 
          roadsideObjects.push({
              spriteKey: spriteKey, worldX: side * (1.5 + Math.random() * 2.5),
-             worldZ: (i * segmentLength * 2.5) + (Math.random() * segmentLength * 2),
+             // Place them ahead of the initial camera position to be recycled into view
+             worldZ: cameraZ + (drawDistance + Math.random() * 20) * segmentLength,
              initialScale: initialObjScale, sprite: newSprite
          });
     }
-    console.log("Create function complete. Number of roadside objects:", roadsideObjects.length);
-
-    // --- MODIFICATION: Handle window resize ---
-    this.scale.on('resize', function (gameSize) {
-        // 'this' inside this callback refers to the ScaleManager, not the Scene.
-        // We need to access the scene's camera and sky object.
-        const scene = game.scene.getScene('default'); // Assuming your scene key is 'default' or get the active scene
-        if (scene) {
-            scene.cameras.main.setSize(gameSize.width, gameSize.height);
-            if (sky) { // Check if sky exists
-                sky.displayWidth = gameSize.width;
-                sky.displayHeight = gameSize.height;
-            }
-            // Re-center game over text if it's visible
-            if(gameOverTextObj && gameOverTextObj.visible){
-                gameOverTextObj.setPosition(gameSize.width / 2, gameSize.height / 2);
-            }
-            // Re-position player car based on new screen height (if needed, though FIT mode might handle this)
-            if(playerCar){
-                 playerCar.y = gameSize.height - 80;
-                 // If not using FIT mode, you might need to adjust playerCar.x as well
-                 // playerCar.x = gameSize.width / 2 + playerX * 60;
-            }
-        }
-    });
-    // Trigger a resize event once at the start to ensure everything is initially scaled correctly
-    this.scale.refresh();
+    console.log("Create function complete.");
 }
 
 
@@ -250,8 +232,8 @@ function update(time, delta) {
     }
     playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5);
 
-    playerCar.x = screenWidth / 2 + playerX * 60; // Use dynamic screenWidth
-    playerCar.y = screenHeight - 80; // Ensure car stays at bottom relative to screenHeight
+    playerCar.x = screenWidth / 2 + playerX * 60;
+    playerCar.y = screenHeight - 80;
     playerCar.angle = 0;
 
     if (cursors.up.isDown) playerSpeed = Math.min(maxSpeed, playerSpeed + accel * dt);
@@ -487,7 +469,7 @@ function renderRoadAndObjects(dt) {
             const pObj = project(
                 obj.worldX * (roadWidthAtScreenBottom / 2) + roadXOffsetAtObjectZ - playerX * roadWidthAtScreenBottom * 0.5,
                 roadYOffsetAtObjectZ - objectVerticalOffset, obj.worldZ,
-                0, cameraHeight, cameraZ, fieldOfView, screenWidth, screenHeight // Use dynamic screenWidth/Height
+                0, cameraHeight, cameraZ, fieldOfView, screenWidth, screenHeight
             );
 
             if (pObj && obj.sprite.getData('activeForCollision') && pObj.y < screenHeight + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.7) {
