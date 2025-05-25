@@ -43,7 +43,7 @@ let playerX = 0; // Player's horizontal position relative to road center (-1 to 
 // Roadside objects
 const roadsideObjects = [];
 // --- MODIFICATION: Added constant to adjust object vertical position ---
-const objectVerticalOffset = 150; // Positive values make objects appear lower (sink into ground)
+const objectVerticalOffset = 350; // Positive values make objects appear lower (sink into ground)
 
 // Variables for curve generation
 let currentRoadCurve = 0;
