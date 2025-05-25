@@ -49,8 +49,7 @@ const naturalPullReduction = 1.5;
 
 // Roadside objects
 const roadsideObjects = [];
-// --- MODIFICATION: Increased objectVerticalOffset significantly ---
-const objectVerticalOffset = 500; // Was 250
+const objectVerticalOffset = 500; 
 
 // Variables for curve generation
 let currentRoadCurveValue = 0;
@@ -59,6 +58,9 @@ let curveDuration = 0;
 const maxCurveStrength = 250;
 const minCurveDuration = 30;
 const maxCurveDuration = 100;
+
+// --- MODIFICATION: Added grass color ---
+const grassColor = 0x006400; // Dark green
 
 // --- Phaser Scene Functions ---
 
@@ -81,7 +83,7 @@ function create() {
 
     cursors = this.input.keyboard.createCursorKeys();
     roadGraphics = this.add.graphics();
-    roadGraphics.setDepth(1);
+    roadGraphics.setDepth(1); // Road and grass will be drawn here
 
     for (let i = 0; i < drawDistance + 50; i++) {
         const isRumbler = Math.floor(i / 5) % 2 === 0;
@@ -92,6 +94,9 @@ function create() {
             hill: 0,
             color: (Math.floor(i / 10) % 2 === 0) ? 0x888888 : 0x777777,
             rumbleColor: isRumbler ? 0xFFFFFF : 0xDD0000,
+            // --- MODIFICATION: Add alternating grass colors for texture (optional) ---
+            grassColor1: (Math.floor(i / 3) % 2 === 0) ? grassColor : 0x005000, // Slightly darker variant
+            grassColor2: (Math.floor(i / 3) % 2 === 0) ? 0x005A00 : grassColor  // Slightly lighter variant
         });
 
         if (i > 10 && i % 15 === 0) {
@@ -125,7 +130,6 @@ function update(time, delta) {
         horizontalPull = Math.min(maxHorizontalPull, horizontalPull + pullIncrement);
     }
 
-    // Reduce pull if no input
     if (!cursors.left.isDown && !cursors.right.isDown && naturalPullReduction > 0) {
         if (horizontalPull > 0) {
             horizontalPull = Math.max(0, horizontalPull - naturalPullReduction * dt);
@@ -195,6 +199,10 @@ function update(time, delta) {
         const isRumbler = Math.floor(oldSegment.index / 5) % 2 === 0;
         oldSegment.color = (Math.floor(oldSegment.index / 10) % 2 === 0) ? 0x888888 : 0x777777;
         oldSegment.rumbleColor = isRumbler ? 0xFFFFFF : 0xDD0000;
+        // --- MODIFICATION: Update alternating grass colors for recycled segments ---
+        oldSegment.grassColor1 = (Math.floor(oldSegment.index / 3) % 2 === 0) ? grassColor : 0x005000;
+        oldSegment.grassColor2 = (Math.floor(oldSegment.index / 3) % 2 === 0) ? 0x005A00 : grassColor;
+
         roadSegments.push(oldSegment);
     }
 
@@ -259,15 +267,38 @@ function renderRoadAndObjects(dt) {
             fieldOfView, config.width, config.height
         );
 
-        accumulatedWorldXOffset = endOfSegmentWorldX;
-        accumulatedWorldYOffset = endOfSegmentWorldY;
-
         if (!p1 || !p2 || p1.y < p2.y || p2.y > config.height || p1.y < 0 ) {
+            // Only update accumulators if segment was valid for projection,
+            // but don't draw if it's off-screen.
+            // If we skip updating accumulators, the road can get disconnected.
+            accumulatedWorldXOffset = endOfSegmentWorldX;
+            accumulatedWorldYOffset = endOfSegmentWorldY;
             continue;
         }
 
         const roadHalfWidthAtP1 = (roadWidthAtScreenBottom / 2) * p1.scale;
         const roadHalfWidthAtP2 = (roadWidthAtScreenBottom / 2) * p2.scale;
+
+        // --- MODIFICATION: Draw Grass Panes FIRST ---
+        // Left Grass
+        roadGraphics.fillStyle(segment.grassColor1 || grassColor, 1);
+        roadGraphics.fillPoints([
+            { x: 0, y: p1.y }, // Screen edge left
+            { x: p1.x - roadHalfWidthAtP1, y: p1.y }, // Left edge of road at p1
+            { x: p2.x - roadHalfWidthAtP2, y: p2.y }, // Left edge of road at p2
+            { x: 0, y: p2.y }  // Screen edge left
+        ], true);
+
+        // Right Grass
+        roadGraphics.fillStyle(segment.grassColor2 || grassColor, 1);
+        roadGraphics.fillPoints([
+            { x: p1.x + roadHalfWidthAtP1, y: p1.y }, // Right edge of road at p1
+            { x: config.width, y: p1.y }, // Screen edge right
+            { x: config.width, y: p2.y }, // Screen edge right
+            { x: p2.x + roadHalfWidthAtP2, y: p2.y }  // Right edge of road at p2
+        ], true);
+        // --- End of Grass Panes ---
+
 
         roadGraphics.fillStyle(segment.color, 1);
         roadGraphics.fillPoints([
@@ -287,6 +318,10 @@ function renderRoadAndObjects(dt) {
         ], true);
 
         currentVisualScreenY = Math.min(currentVisualScreenY, p2.y);
+        
+        // Update accumulators for the next segment's start point
+        accumulatedWorldXOffset = endOfSegmentWorldX;
+        accumulatedWorldYOffset = endOfSegmentWorldY;
     }
 
     roadsideObjects.sort((a, b) => b.worldZ - a.worldZ);
