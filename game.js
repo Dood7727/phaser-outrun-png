@@ -88,8 +88,8 @@ let sky; // Make sky a global variable to access it in resize handler
 // --- Phaser Scene Functions ---
 
 function preload() {
-    this.load.image('car', 'assets/images/audiR8.png');
-    //this.load.image('car', 'assets/images/taycan.png');
+    //this.load.image('car', 'assets/images/audiR8.png');
+    this.load.image('car', 'assets/images/taycan.png');
     
     this.load.image('tree', 'assets/images/tree.png');
     this.load.image('backgroundSky', 'assets/images/sky.png');
