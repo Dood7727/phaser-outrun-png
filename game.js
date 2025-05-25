@@ -125,11 +125,15 @@ function create() {
 
     restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
 
-    // Initialize Road Segments
-    initializeRoadSegments(); // Call helper function
+    initializeRoadSegments(); 
 
-    // Initialize Roadside Objects (sprites are created here)
-    for (let i = 0; i < (drawDistance + 50) / 5 ; i++) { // Create fewer initial objects, they will be recycled
+    // Clear roadsideObjects array before repopulating if create() can be called multiple times
+    // For a full page reload, this isn't strictly necessary as it's a fresh start,
+    // but good practice if you were to call create() without a reload.
+    while(roadsideObjects.length) roadsideObjects.pop().sprite.destroy();
+
+
+    for (let i = 0; i < (drawDistance + 50) / 5 ; i++) { 
          const side = (Math.random() > 0.5 ? 1 : -1);
          const isSign = Math.random() > 0.5;
          const spriteKey = isSign ? 'sign' : 'tree';
@@ -141,7 +145,6 @@ function create() {
 
          roadsideObjects.push({
              spriteKey: spriteKey, worldX: side * (1.5 + Math.random() * 2.5),
-             // Place them initially far away to be recycled into view
              worldZ: cameraZ + (drawDistance + Math.random() * 50) * segmentLength,
              initialScale: initialObjScale, sprite: newSprite
          });
@@ -151,9 +154,8 @@ function create() {
     console.log("Create function complete.");
 }
 
-// --- MODIFICATION: Helper function to initialize/reset road segments ---
 function initializeRoadSegments() {
-    roadSegments = []; // Clear existing segments
+    roadSegments = []; 
     for (let i = 0; i < drawDistance + 50; i++) {
         const isRumbler = Math.floor(i / 5) % 2 === 0;
         roadSegments.push({
@@ -264,7 +266,7 @@ function update(time, delta) {
 
     while (roadSegments.length > 0 && roadSegments[0].z < cameraZ - segmentLength * 2) {
         const oldSegment = roadSegments.shift();
-        oldSegment.index = (roadSegments.length > 0 ? roadSegments[roadSegments.length - 1].index : -1) + 1; // Ensure index increments correctly
+        oldSegment.index = (roadSegments.length > 0 ? roadSegments[roadSegments.length - 1].index : -1) + 1; 
         oldSegment.z = (roadSegments.length > 0 ? roadSegments[roadSegments.length - 1].z : cameraZ + (drawDistance -1)*segmentLength ) + segmentLength;
 
 
@@ -295,16 +297,15 @@ function update(time, delta) {
     }
 
     for (const obj of roadsideObjects) {
-        if (obj.worldZ < cameraZ - segmentLength * 2) { // If object is well behind camera
-            // Find the furthest road segment to place the object ahead of
+        if (obj.worldZ < cameraZ - segmentLength * 2) { 
             let maxZ = 0;
             if (roadSegments.length > 0) {
                 maxZ = roadSegments[roadSegments.length -1].z;
-            } else { // Should not happen if game is running
+            } else { 
                 maxZ = cameraZ + drawDistance * segmentLength;
             }
 
-            obj.worldZ = maxZ + (Math.random() * segmentLength * 10) + segmentLength * 5; // Place it further ahead
+            obj.worldZ = maxZ + (Math.random() * segmentLength * 10) + segmentLength * 5; 
             obj.worldX = (Math.random() > 0.5 ? 1 : -1) * (1.5 + Math.random() * 3.5);
             const isSign = Math.random() > 0.5;
             obj.spriteKey = isSign ? 'sign' : 'tree';
@@ -343,44 +344,8 @@ function triggerGameOver() {
 }
 
 function restartGame() {
-    score = 0;
-    scoreText.setText('Score: ' + Math.floor(score));
-    playerLives = 3;
-    livesText.setText('Lives: ' + playerLives);
-
-    isGameOver = false;
-    gameOverTextObj.setVisible(false);
-
-    cameraZ = 0;
-    playerX = 0;
-    horizontalPull = 0;
-    playerSpeed = 0;
-
-    playerInvincible = false;
-    playerCar.setAlpha(1);
-    playerCar.x = config.width / 2;
-
-    // --- MODIFICATION: Re-initialize road segments ---
-    initializeRoadSegments();
-
-    // Reset roadside objects more thoroughly
-    for (const obj of roadsideObjects) {
-        obj.sprite.setVisible(false);
-        obj.sprite.setData('activeForCollision', true);
-        // Place them far ahead to be properly recycled by the main loop
-        let maxRoadZ = 0;
-        if(roadSegments.length > 0) maxRoadZ = roadSegments[roadSegments.length-1].z;
-        else maxRoadZ = cameraZ + (drawDistance -1) * segmentLength;
-
-        obj.worldZ = maxRoadZ + (Math.random() * segmentLength * 20) + segmentLength * 10; // Ensure they are well ahead
-        obj.worldX = (Math.random() > 0.5 ? 1 : -1) * (1.5 + Math.random() * 2.5); // Re-randomize X
-    }
-
-    currentRoadCurveValue = 0;
-    curveDirection = 0;
-    curveDuration = 0;
-
-    console.log("Game Restarted");
+    // --- MODIFICATION: Simply reload the page ---
+    window.location.reload();
 }
 
 
