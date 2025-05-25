@@ -489,7 +489,7 @@ function renderRoadAndObjects(dt) {
             const pObj = project(
                 obj.worldX * (roadWidthAtScreenBottom / 2) + roadXOffsetAtObjectZ - playerX * roadWidthAtScreenBottom * 0.5,
                 roadYOffsetAtObjectZ - objectVerticalOffset, obj.worldZ,
-                0, cameraHeight, cameraZ, fieldOfView, screenWidth, screenHeight // Use dynamic screenWidth/Height
+                0, cameraHeight, cameraZ, fieldOfView, screenWidth, screenHeight
             );
 
             if (pObj && obj.sprite.getData('activeForCollision') && pObj.y < screenHeight + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.7) {
