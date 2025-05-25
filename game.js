@@ -6,7 +6,7 @@ const config = {
     physics: {
         default: 'arcade',
         arcade: {
-            debug: false // Set to true for collision debugging during development
+            debug: false
         }
     },
     scene: {
@@ -21,37 +21,32 @@ const game = new Phaser.Game(config);
 // --- Global Variables ---
 let playerCar;
 let cursors;
-let roadGraphics; // For drawing the road
+let roadGraphics;
 
-// Road and Camera parameters
 let roadSegments = [];
-let cameraZ = 0; // Player's Z position along the track (world units)
-const segmentLength = 100; // Length of a single road segment in world units
-const roadWidthAtScreenBottom = 2400; // Visual base width of the road
-const fieldOfView = 100; // Affects perspective scaling
-const cameraHeight = 1000; // Camera height above the road plane (Y=0)
-const drawDistance = 300; // How many segments ahead to process and draw
+let cameraZ = 0;
+const segmentLength = 100;
+const roadWidthAtScreenBottom = 2400;
+const fieldOfView = 100;
+const cameraHeight = 1000;
+const drawDistance = 300;
 
-// Player state
 let playerSpeed = 0;
 const maxSpeed = 2400;
 const accel = 800;
 const decel = 600;
 const braking = 1600;
-let playerX = 0; // Player's horizontal position relative to road center (-1 to 1, can extend slightly)
+let playerX = 0;
 
-let horizontalPull = 0; 
-const pullIncrement = 0.4;   
-const maxHorizontalPull = 2.0; 
-const sidewaysSpeedFactor = 1.2; 
-const naturalPullReduction = 1.5; 
+let horizontalPull = 0;
+const pullIncrement = 0.4;
+const maxHorizontalPull = 2.0;
+const sidewaysSpeedFactor = 1.2;
+const naturalPullReduction = 1.5;
 
-
-// Roadside objects
 const roadsideObjects = [];
-const objectVerticalOffset = 500; 
+const objectVerticalOffset = 500;
 
-// Variables for curve generation
 let currentRoadCurveValue = 0;
 let curveDirection = 0;
 let curveDuration = 0;
@@ -61,17 +56,25 @@ const maxCurveDuration = 100;
 
 const grassColor = 0x006400;
 
-// --- MODIFICATION: Score Variables ---
 let score = 0;
 let scoreText;
-const scoreBaseIncrement = 1; // Points per unit of distance at normal speed
+const scoreBaseIncrement = 1;
 const scoreMultiplierCenter = 2.0;
 const scoreMultiplierRumble = 0.5;
-const scoreMultiplierOffTrack = 0.1; // For being far to the sides
+const scoreMultiplierOffTrack = 0.1;
+const playerXCenterThreshold = 0.15;
+const playerXRumbleThresholdMin = 0.7;
+const playerXRumbleThresholdMax = 1.2;
 
-const playerXCenterThreshold = 0.15; // How close to center for bonus
-const playerXRumbleThresholdMin = 0.7; // Start of rumble strip penalty zone
-const playerXRumbleThresholdMax = 1.2; // End of rumble strip penalty zone (further out is off-track for scoring)
+// --- MODIFICATION: Game State and Lives Variables ---
+let playerLives = 3;
+let livesText;
+let isGameOver = false;
+let gameOverTextObj;
+let playerInvincible = false;
+const invincibilityDuration = 2000; // 2 seconds
+let lastHitTime = 0;
+let restartKey;
 
 
 // --- Phaser Scene Functions ---
@@ -92,35 +95,55 @@ function create() {
     playerCar = this.add.sprite(config.width / 2, config.height - 80, 'audiR8');
     playerCar.setScale(0.125);
     playerCar.setDepth(100);
+    // Give player car a slightly smaller bounding box for collision to be more forgiving
+    // Note: We are using getBounds() later, so direct physics body might not be needed
+    // if we stick to screen-space collision. For now, this is just for reference.
+    // this.physics.world.enable(playerCar);
+    // playerCar.body.setSize(playerCar.width * 0.7, playerCar.height * 0.8);
+
 
     cursors = this.input.keyboard.createCursorKeys();
     roadGraphics = this.add.graphics();
-    roadGraphics.setDepth(1); 
+    roadGraphics.setDepth(1);
 
-    // --- MODIFICATION: Initialize Score Text ---
     score = 0;
-    scoreText = this.add.text(16, 16, 'Score: 0', { 
-        fontSize: '24px', 
-        fill: '#ffffff', 
-        fontFamily: 'Arial, sans-serif',
-        stroke: '#000000',
-        strokeThickness: 4 
+    scoreText = this.add.text(16, 16, 'Score: 0', {
+        fontSize: '24px', fill: '#ffffff', fontFamily: 'Arial, sans-serif',
+        stroke: '#000000', strokeThickness: 4
     });
-    scoreText.setScrollFactor(0); // Keep score fixed on screen
-    scoreText.setDepth(200); // Ensure score is on top of everything
+    scoreText.setScrollFactor(0).setDepth(200);
+
+    // --- MODIFICATION: Initialize Lives Text ---
+    playerLives = 3;
+    livesText = this.add.text(16, 50, 'Lives: ' + playerLives, {
+        fontSize: '24px', fill: '#ffffff', fontFamily: 'Arial, sans-serif',
+        stroke: '#000000', strokeThickness: 4
+    });
+    livesText.setScrollFactor(0).setDepth(200);
+
+    // --- MODIFICATION: Initialize Game Over Text (hidden) ---
+    gameOverTextObj = this.add.text(config.width / 2, config.height / 2, 'GAME OVER\nPress R to Restart', {
+        fontSize: '48px', fill: '#ff0000', fontFamily: 'Arial, sans-serif',
+        align: 'center', stroke: '#000000', strokeThickness: 6
+    });
+    gameOverTextObj.setOrigin(0.5).setScrollFactor(0).setDepth(300).setVisible(false);
+
+    isGameOver = false;
+    playerInvincible = false;
+    lastHitTime = 0;
+
+    // Key for restarting
+    restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
 
 
     for (let i = 0; i < drawDistance + 50; i++) {
         const isRumbler = Math.floor(i / 5) % 2 === 0;
         roadSegments.push({
-            index: i,
-            z: i * segmentLength,
-            curve: 0,
-            hill: 0,
+            index: i, z: i * segmentLength, curve: 0, hill: 0,
             color: (Math.floor(i / 10) % 2 === 0) ? 0x888888 : 0x777777,
             rumbleColor: isRumbler ? 0xFFFFFF : 0xDD0000,
-            grassColor1: (Math.floor(i / 3) % 2 === 0) ? grassColor : 0x005000, 
-            grassColor2: (Math.floor(i / 3) % 2 === 0) ? 0x005A00 : grassColor  
+            grassColor1: (Math.floor(i / 3) % 2 === 0) ? grassColor : 0x005000,
+            grassColor2: (Math.floor(i / 3) % 2 === 0) ? 0x005A00 : grassColor
         });
 
         if (i > 10 && i % 15 === 0) {
@@ -128,24 +151,43 @@ function create() {
             const isSign = Math.random() > 0.5;
             const spriteKey = isSign ? 'sign' : 'tree';
             let initialObjScale = 0.3 + Math.random() * 0.4;
-            if (isSign) {
-                initialObjScale = 0.03 + Math.random() * 0.04;
-            }
+            if (isSign) initialObjScale = 0.03 + Math.random() * 0.04;
+
+            const newSprite = this.add.sprite(0, 0, spriteKey).setVisible(false).setDepth(50).setOrigin(0.5, 1);
+            newSprite.setData('activeForCollision', true); // Custom flag for collision status
 
             roadsideObjects.push({
-                spriteKey: spriteKey,
-                worldX: side * (1.5 + Math.random() * 2.5),
+                spriteKey: spriteKey, worldX: side * (1.5 + Math.random() * 2.5),
                 worldZ: i * segmentLength + (Math.random() * segmentLength),
-                initialScale: initialObjScale,
-                sprite: this.add.sprite(0, 0, spriteKey).setVisible(false).setDepth(50).setOrigin(0.5, 1)
+                initialScale: initialObjScale, sprite: newSprite
             });
         }
     }
-    console.log("Create function complete. Player car:", playerCar, "Cursors enabled:", cursors !== undefined);
+    console.log("Create function complete.");
 }
 
 function update(time, delta) {
     const dt = delta / 1000;
+
+    // --- MODIFICATION: Game Over and Restart Logic ---
+    if (isGameOver) {
+        if (Phaser.Input.Keyboard.JustDown(restartKey)) {
+            restartGame.call(this); // Use .call(this) to maintain scene context
+        }
+        return; // Skip main game loop if game over
+    }
+
+    // Invincibility check
+    if (playerInvincible) {
+        if (time > lastHitTime + invincibilityDuration) {
+            playerInvincible = false;
+            playerCar.setAlpha(1); // Restore full visibility
+        } else {
+            // Flash player car
+            playerCar.setAlpha(Math.floor(time / 100) % 2 === 0 ? 0.5 : 1);
+        }
+    }
+
 
     if (Phaser.Input.Keyboard.JustDown(cursors.left)) {
         horizontalPull = Math.max(-maxHorizontalPull, horizontalPull - pullIncrement);
@@ -155,15 +197,11 @@ function update(time, delta) {
     }
 
     if (!cursors.left.isDown && !cursors.right.isDown && naturalPullReduction > 0) {
-        if (horizontalPull > 0) {
-            horizontalPull = Math.max(0, horizontalPull - naturalPullReduction * dt);
-        } else if (horizontalPull < 0) {
-            horizontalPull = Math.min(0, horizontalPull + naturalPullReduction * dt);
-        }
+        if (horizontalPull > 0) horizontalPull = Math.max(0, horizontalPull - naturalPullReduction * dt);
+        else if (horizontalPull < 0) horizontalPull = Math.min(0, horizontalPull + naturalPullReduction * dt);
     }
     
     playerX += horizontalPull * sidewaysSpeedFactor * dt;
-
 
     if (roadSegments.length > 0) {
         const currentSegmentIndex = Math.floor((cameraZ + cameraHeight) / segmentLength) % roadSegments.length;
@@ -176,38 +214,49 @@ function update(time, delta) {
     playerCar.x = config.width / 2 + playerX * 60;
     playerCar.angle = 0;
 
-    if (cursors.up.isDown) {
-        playerSpeed = Math.min(maxSpeed, playerSpeed + accel * dt);
-    } else if (cursors.down.isDown) {
-        playerSpeed = Math.max(0, playerSpeed - braking * dt);
-    } else {
-        playerSpeed = Math.max(0, playerSpeed - decel * dt);
-    }
+    if (cursors.up.isDown) playerSpeed = Math.min(maxSpeed, playerSpeed + accel * dt);
+    else if (cursors.down.isDown) playerSpeed = Math.max(0, playerSpeed - braking * dt);
+    else playerSpeed = Math.max(0, playerSpeed - decel * dt);
+    
     cameraZ += playerSpeed * dt;
 
-    // --- MODIFICATION: Score Calculation ---
     if (playerSpeed > 0) {
         let currentMultiplier = 1.0;
         const absPlayerX = Math.abs(playerX);
-
-        if (absPlayerX <= playerXCenterThreshold) {
-            currentMultiplier = scoreMultiplierCenter;
-        } else if (absPlayerX > playerXRumbleThresholdMin && absPlayerX <= playerXRumbleThresholdMax) {
-            currentMultiplier = scoreMultiplierRumble;
-        } else if (absPlayerX > playerXRumbleThresholdMax) {
-            currentMultiplier = scoreMultiplierOffTrack;
-        }
-        // Otherwise, it's the default 1.0 (for normal zone between center and rumble)
-
-        const distanceIncrement = playerSpeed * dt; // Actual distance covered this frame
-        score += (distanceIncrement / 100) * scoreBaseIncrement * currentMultiplier; // Divide distance by 100 for more manageable score numbers
+        if (absPlayerX <= playerXCenterThreshold) currentMultiplier = scoreMultiplierCenter;
+        else if (absPlayerX > playerXRumbleThresholdMin && absPlayerX <= playerXRumbleThresholdMax) currentMultiplier = scoreMultiplierRumble;
+        else if (absPlayerX > playerXRumbleThresholdMax) currentMultiplier = scoreMultiplierOffTrack;
+        
+        const distanceIncrement = playerSpeed * dt;
+        score += (distanceIncrement / 100) * scoreBaseIncrement * currentMultiplier;
         scoreText.setText('Score: ' + Math.floor(score));
     }
-    // --- End of Score Calculation ---
+
+    renderRoadAndObjects.call(this, dt); // Render before collision check for correct bounds
+
+    // --- MODIFICATION: Collision Detection Loop ---
+    if (!playerInvincible) {
+        const playerBounds = playerCar.getBounds();
+        // Adjust player bounds to be a bit smaller/more forgiving
+        playerBounds.width *= 0.7;
+        playerBounds.height *= 0.8;
+        playerBounds.centerX = playerCar.x;
+        playerBounds.centerY = playerCar.y;
 
 
-    renderRoadAndObjects.call(this, dt);
+        for (const obj of roadsideObjects) {
+            if (obj.sprite.visible && obj.sprite.getData('activeForCollision')) {
+                const objBounds = obj.sprite.getBounds();
+                if (Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, objBounds)) {
+                    handlePlayerHit.call(this, obj.sprite, time); // Pass current time
+                    break; // Only handle one collision per frame
+                }
+            }
+        }
+    }
 
+
+    // Track generation
     while (roadSegments.length > 0 && roadSegments[0].z < cameraZ - segmentLength * 2) {
         const oldSegment = roadSegments.shift();
         oldSegment.index = roadSegments[roadSegments.length - 1].index + 1;
@@ -219,37 +268,27 @@ function update(time, delta) {
                 currentRoadCurveValue = curveDirection * (Math.random() * 0.3 + 0.2) * maxCurveStrength;
                 curveDuration = minCurveDuration + Math.random() * (maxCurveDuration - minCurveDuration);
             } else {
-                currentRoadCurveValue = 0;
-                curveDirection = 0;
+                currentRoadCurveValue = 0; curveDirection = 0;
                 curveDuration = minCurveDuration / 3 + Math.random() * (maxCurveDuration / 3 - minCurveDuration / 3);
             }
         }
+        if (curveDuration > 0) { oldSegment.curve = currentRoadCurveValue; curveDuration--;}
+        else oldSegment.curve = 0;
 
-        if (curveDuration > 0) {
-            oldSegment.curve = currentRoadCurveValue;
-            curveDuration--;
-        } else {
-            oldSegment.curve = 0;
-        }
-
-        if (Math.random() < 0.02) {
-             oldSegment.hill = (Math.random() - 0.5) * 450;
-        } else if (oldSegment.hill !== 0 && Math.random() < 0.2) {
-             oldSegment.hill *= 0.75;
-             if (Math.abs(oldSegment.hill) < 1) oldSegment.hill = 0;
-        } else {
-            oldSegment.hill = 0;
-        }
+        if (Math.random() < 0.02) oldSegment.hill = (Math.random() - 0.5) * 450;
+        else if (oldSegment.hill !== 0 && Math.random() < 0.2) {
+            oldSegment.hill *= 0.75; if (Math.abs(oldSegment.hill) < 1) oldSegment.hill = 0;
+        } else oldSegment.hill = 0;
 
         const isRumbler = Math.floor(oldSegment.index / 5) % 2 === 0;
         oldSegment.color = (Math.floor(oldSegment.index / 10) % 2 === 0) ? 0x888888 : 0x777777;
         oldSegment.rumbleColor = isRumbler ? 0xFFFFFF : 0xDD0000;
         oldSegment.grassColor1 = (Math.floor(oldSegment.index / 3) % 2 === 0) ? grassColor : 0x005000;
         oldSegment.grassColor2 = (Math.floor(oldSegment.index / 3) % 2 === 0) ? 0x005A00 : grassColor;
-
         roadSegments.push(oldSegment);
     }
 
+    // Object recycling
     for (const obj of roadsideObjects) {
         if (obj.worldZ < cameraZ - segmentLength * 2) {
             obj.worldZ = roadSegments[roadSegments.length - 1].z + (Math.random() * segmentLength * 10);
@@ -257,33 +296,98 @@ function update(time, delta) {
             const isSign = Math.random() > 0.5;
             obj.spriteKey = isSign ? 'sign' : 'tree';
             obj.sprite.setTexture(obj.spriteKey);
-            if (isSign) {
-                obj.initialScale = 0.03 + Math.random() * 0.04;
-            } else {
-                obj.initialScale = 0.3 + Math.random() * 0.4;
-            }
+            if (isSign) obj.initialScale = 0.03 + Math.random() * 0.04;
+            else obj.initialScale = 0.3 + Math.random() * 0.4;
+            obj.sprite.setVisible(false); // Ensure it's hidden until re-rendered
+            obj.sprite.setData('activeForCollision', true); // Reactivate for collision
         }
     }
 }
+
+// --- MODIFICATION: New Helper Functions ---
+function handlePlayerHit(collidedObjectSprite, currentTime) {
+    if (isGameOver) return; // Don't process hits if already game over
+
+    playerLives--;
+    livesText.setText('Lives: ' + playerLives);
+
+    playerInvincible = true;
+    lastHitTime = currentTime;
+    playerCar.setAlpha(0.5); // Indicate invincibility
+
+    // "Disable" the collided object to prevent immediate re-collision
+    collidedObjectSprite.setVisible(false); // Hide it
+    collidedObjectSprite.setData('activeForCollision', false); // Mark as no longer collidable
+
+    // Optional: Add a sound effect for collision
+    // this.sound.play('collisionSound');
+
+    if (playerLives <= 0) {
+        triggerGameOver.call(this); // Use .call(this) to maintain scene context
+    }
+}
+
+function triggerGameOver() {
+    isGameOver = true;
+    playerSpeed = 0; // Stop the car
+    horizontalPull = 0; // Stop any sideways pull
+    gameOverTextObj.setVisible(true);
+    // Score is reset when restarting, not immediately on game over display
+}
+
+function restartGame() {
+    score = 0;
+    scoreText.setText('Score: ' + Math.floor(score));
+    playerLives = 3;
+    livesText.setText('Lives: ' + playerLives);
+
+    isGameOver = false;
+    gameOverTextObj.setVisible(false);
+
+    cameraZ = 0;
+    playerX = 0;
+    horizontalPull = 0;
+    playerSpeed = 0;
+
+    playerInvincible = false;
+    playerCar.setAlpha(1);
+    playerCar.x = config.width / 2; // Reset car screen position
+
+    // Reset roadside objects to be active for collision and initially invisible
+    // They will be repositioned by the recycling logic as the game restarts
+    for (const obj of roadsideObjects) {
+        obj.sprite.setVisible(false);
+        obj.sprite.setData('activeForCollision', true);
+        // Force them to be recycled by setting their Z far behind
+        obj.worldZ = cameraZ - drawDistance * segmentLength;
+    }
+    // Also re-initialize road segments to ensure a fresh start for curves/hills
+    // This is a bit more involved, for now, just resetting cameraZ and letting recycle logic run
+    // For a truly fresh track, you might clear and re-populate roadSegments here.
+    // For simplicity, we'll rely on the existing recycling.
+    currentRoadCurveValue = 0;
+    curveDirection = 0;
+    curveDuration = 0;
+
+
+    console.log("Game Restarted");
+}
+
 
 function project(worldX, worldActualY, worldZ, cameraX, cameraActualY, cameraActualZ, fov, screenWidth, screenHeight) {
     const dx = worldX - cameraX;
     const dy = worldActualY - cameraActualY;
     const dz = worldZ - cameraActualZ;
-
     if (dz <= 0.1) return null;
-
     const perspectiveFactor = fov / dz;
     const screenX = (screenWidth / 2) + (dx * perspectiveFactor);
     const screenY = (screenHeight / 2) - (dy * perspectiveFactor);
     const scale = perspectiveFactor;
-
     return { x: screenX, y: screenY, scale: scale, dz: dz };
 }
 
 function renderRoadAndObjects(dt) {
     roadGraphics.clear();
-
     let currentVisualScreenY = config.height;
     let accumulatedWorldXOffset = 0;
     let accumulatedWorldYOffset = 0;
@@ -294,19 +398,15 @@ function renderRoadAndObjects(dt) {
 
         const p1 = project(
             accumulatedWorldXOffset - playerX * roadWidthAtScreenBottom * 0.5,
-            accumulatedWorldYOffset,
-            segment.z,
+            accumulatedWorldYOffset, segment.z,
             0, cameraHeight, cameraZ,
             fieldOfView, config.width, config.height
         );
-
         let endOfSegmentWorldX = accumulatedWorldXOffset + segment.curve;
         let endOfSegmentWorldY = accumulatedWorldYOffset + segment.hill;
-
         const p2 = project(
             (endOfSegmentWorldX - playerX * roadWidthAtScreenBottom * 0.5),
-            endOfSegmentWorldY,
-            segment.z + segmentLength,
+            endOfSegmentWorldY, segment.z + segmentLength,
             0, cameraHeight, cameraZ,
             fieldOfView, config.width, config.height
         );
@@ -321,93 +421,58 @@ function renderRoadAndObjects(dt) {
         const roadHalfWidthAtP2 = (roadWidthAtScreenBottom / 2) * p2.scale;
 
         roadGraphics.fillStyle(segment.grassColor1 || grassColor, 1);
-        roadGraphics.fillPoints([
-            { x: 0, y: p1.y }, 
-            { x: p1.x - roadHalfWidthAtP1, y: p1.y }, 
-            { x: p2.x - roadHalfWidthAtP2, y: p2.y }, 
-            { x: 0, y: p2.y }  
-        ], true);
-
+        roadGraphics.fillPoints([{ x: 0, y: p1.y }, { x: p1.x - roadHalfWidthAtP1, y: p1.y }, { x: p2.x - roadHalfWidthAtP2, y: p2.y }, { x: 0, y: p2.y }], true);
         roadGraphics.fillStyle(segment.grassColor2 || grassColor, 1);
-        roadGraphics.fillPoints([
-            { x: p1.x + roadHalfWidthAtP1, y: p1.y }, 
-            { x: config.width, y: p1.y }, 
-            { x: config.width, y: p2.y }, 
-            { x: p2.x + roadHalfWidthAtP2, y: p2.y }  
-        ], true);
+        roadGraphics.fillPoints([{ x: p1.x + roadHalfWidthAtP1, y: p1.y }, { x: config.width, y: p1.y }, { x: config.width, y: p2.y }, { x: p2.x + roadHalfWidthAtP2, y: p2.y }], true);
         
         roadGraphics.fillStyle(segment.color, 1);
-        roadGraphics.fillPoints([
-            { x: p1.x - roadHalfWidthAtP1, y: p1.y }, { x: p1.x + roadHalfWidthAtP1, y: p1.y },
-            { x: p2.x + roadHalfWidthAtP2, y: p2.y }, { x: p2.x - roadHalfWidthAtP2, y: p2.y }
-        ], true);
-
+        roadGraphics.fillPoints([{ x: p1.x - roadHalfWidthAtP1, y: p1.y }, { x: p1.x + roadHalfWidthAtP1, y: p1.y }, { x: p2.x + roadHalfWidthAtP2, y: p2.y }, { x: p2.x - roadHalfWidthAtP2, y: p2.y }], true);
         const rumbleWidthRatio = 0.05;
         roadGraphics.fillStyle(segment.rumbleColor, 1);
-        roadGraphics.fillPoints([
-            { x: p1.x - roadHalfWidthAtP1, y: p1.y }, { x: p1.x - roadHalfWidthAtP1 * (1 - rumbleWidthRatio), y: p1.y },
-            { x: p2.x - roadHalfWidthAtP2 * (1 - rumbleWidthRatio), y: p2.y }, { x: p2.x - roadHalfWidthAtP2, y: p2.y }
-        ], true);
-        roadGraphics.fillPoints([
-            { x: p1.x + roadHalfWidthAtP1 * (1 - rumbleWidthRatio), y: p1.y }, { x: p1.x + roadHalfWidthAtP1, y: p1.y },
-            { x: p2.x + roadHalfWidthAtP2, y: p2.y }, { x: p2.x + roadHalfWidthAtP2 * (1 - rumbleWidthRatio), y: p2.y }
-        ], true);
+        roadGraphics.fillPoints([{ x: p1.x - roadHalfWidthAtP1, y: p1.y }, { x: p1.x - roadHalfWidthAtP1 * (1 - rumbleWidthRatio), y: p1.y }, { x: p2.x - roadHalfWidthAtP2 * (1 - rumbleWidthRatio), y: p2.y }, { x: p2.x - roadHalfWidthAtP2, y: p2.y }], true);
+        roadGraphics.fillPoints([{ x: p1.x + roadHalfWidthAtP1 * (1 - rumbleWidthRatio), y: p1.y }, { x: p1.x + roadHalfWidthAtP1, y: p1.y }, { x: p2.x + roadHalfWidthAtP2, y: p2.y }, { x: p2.x + roadHalfWidthAtP2 * (1 - rumbleWidthRatio), y: p2.y }], true);
 
         currentVisualScreenY = Math.min(currentVisualScreenY, p2.y);
-        
         accumulatedWorldXOffset = endOfSegmentWorldX;
         accumulatedWorldYOffset = endOfSegmentWorldY;
     }
 
     roadsideObjects.sort((a, b) => b.worldZ - a.worldZ);
-
     for (const obj of roadsideObjects) {
         const objWorldZRelativeToCamera = obj.worldZ - cameraZ;
-
         if (objWorldZRelativeToCamera > 0.1 && objWorldZRelativeToCamera < drawDistance * segmentLength * 0.8) {
-            let roadXOffsetAtObjectZ = 0;
-            let roadYOffsetAtObjectZ = 0;
-
-            let tempAccumX = 0;
-            let tempAccumY = 0;
+            let roadXOffsetAtObjectZ = 0; let roadYOffsetAtObjectZ = 0;
+            let tempAccumX = 0; let tempAccumY = 0;
             for(let k=0; k < roadSegments.length; k++) {
                 const seg = roadSegments[k];
                 if (seg.z >= obj.worldZ) {
                     if (obj.worldZ > seg.z && obj.worldZ < seg.z + segmentLength) { 
                         const fraction = (obj.worldZ - seg.z) / segmentLength;
-                        tempAccumX += seg.curve * fraction;
-                        tempAccumY += seg.hill * fraction;
+                        tempAccumX += seg.curve * fraction; tempAccumY += seg.hill * fraction;
                     }
                     break;
                 }
                 if (seg.z < cameraZ - segmentLength * 3 && obj.worldZ > seg.z + segmentLength*2) continue;
-
-
-                tempAccumX += seg.curve;
-                tempAccumY += seg.hill;
+                tempAccumX += seg.curve; tempAccumY += seg.hill;
             }
-            roadXOffsetAtObjectZ = tempAccumX;
-            roadYOffsetAtObjectZ = tempAccumY;
-
+            roadXOffsetAtObjectZ = tempAccumX; roadYOffsetAtObjectZ = tempAccumY;
 
             const pObj = project(
                 obj.worldX * (roadWidthAtScreenBottom / 2) + roadXOffsetAtObjectZ - playerX * roadWidthAtScreenBottom * 0.5,
-                roadYOffsetAtObjectZ - objectVerticalOffset,
-                obj.worldZ,
-                0, cameraHeight, cameraZ,
-                fieldOfView, config.width, config.height
+                roadYOffsetAtObjectZ - objectVerticalOffset, obj.worldZ,
+                0, cameraHeight, cameraZ, fieldOfView, config.width, config.height
             );
 
-            if (pObj && pObj.y < config.height + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.7) {
+            if (pObj && obj.sprite.getData('activeForCollision') && pObj.y < config.height + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.7) {
                 obj.sprite.setVisible(true);
                 obj.sprite.setPosition(pObj.x, pObj.y);
                 const finalScale = pObj.scale * obj.initialScale * 30;
                 obj.sprite.setScale(finalScale);
                 obj.sprite.setDepth(10 + Math.floor(100000 / pObj.dz) );
-            } else {
-                obj.sprite.setVisible(false);
+            } else if (obj.sprite.getData('activeForCollision')) { // Only hide if it's still active
+                 obj.sprite.setVisible(false);
             }
-        } else {
+        } else if (obj.sprite.getData('activeForCollision')) {
             obj.sprite.setVisible(false);
         }
     }
