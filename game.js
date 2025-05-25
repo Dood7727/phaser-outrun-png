@@ -40,17 +40,17 @@ const decel = 600;
 const braking = 1600;
 let playerX = 0; // Player's horizontal position relative to road center (-1 to 1, can extend slightly)
 
-// --- MODIFICATION: Variables for new steering/pull mechanic ---
-let horizontalPull = 0; // Current pull strength (-ve for left, +ve for right)
-const pullIncrement = 0.4;   // How much each key press changes the pull
-const maxHorizontalPull = 2.0; // Max pull strength in either direction
-const sidewaysSpeedFactor = 1.2; // How fast playerX changes based on horizontalPull
-const naturalPullReduction = 0.1; // Factor to slowly reduce pull if no input (optional, can be 0)
+let horizontalPull = 0; 
+const pullIncrement = 0.4;   
+const maxHorizontalPull = 2.0; 
+const sidewaysSpeedFactor = 1.2; 
+const naturalPullReduction = 0.1; 
 
 
 // Roadside objects
 const roadsideObjects = [];
-const objectVerticalOffset = 150;
+// --- MODIFICATION: Increased objectVerticalOffset to make objects appear lower ---
+const objectVerticalOffset = 250; // Was 150
 
 // Variables for curve generation
 let currentRoadCurveValue = 0;
@@ -118,17 +118,13 @@ function create() {
 function update(time, delta) {
     const dt = delta / 1000;
 
-    // --- MODIFICATION: New steering/pull logic ---
     if (Phaser.Input.Keyboard.JustDown(cursors.left)) {
         horizontalPull = Math.max(-maxHorizontalPull, horizontalPull - pullIncrement);
-        // console.log("Pull Left. horizontalPull:", horizontalPull);
     }
     if (Phaser.Input.Keyboard.JustDown(cursors.right)) {
         horizontalPull = Math.min(maxHorizontalPull, horizontalPull + pullIncrement);
-        // console.log("Pull Right. horizontalPull:", horizontalPull);
     }
 
-    // Optional: Slowly reduce pull if no input, to make it eventually straighten out
     if (!cursors.left.isDown && !cursors.right.isDown && naturalPullReduction > 0) {
         if (horizontalPull > 0) {
             horizontalPull = Math.max(0, horizontalPull - naturalPullReduction * dt);
@@ -136,27 +132,21 @@ function update(time, delta) {
             horizontalPull = Math.min(0, horizontalPull + naturalPullReduction * dt);
         }
     }
-    // --- End of new steering/pull logic ---
-
-    // Apply the horizontal pull to playerX
+    
     playerX += horizontalPull * sidewaysSpeedFactor * dt;
 
 
-    // Centrifugal force still applies to playerX
     if (roadSegments.length > 0) {
         const currentSegmentIndex = Math.floor((cameraZ + cameraHeight) / segmentLength) % roadSegments.length;
         const currentCurveForCentrifugal = roadSegments[currentSegmentIndex]?.curve || 0;
         const centrifugalForce = currentCurveForCentrifugal * dt * (playerSpeed / maxSpeed) * 0.001;
         playerX -= centrifugalForce;
     }
-    playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5); // Clamp logical road position
+    playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5); 
 
-    // Update car's screen position
     playerCar.x = config.width / 2 + playerX * 60;
-    // --- MODIFICATION: Car always faces forward ---
     playerCar.angle = 0;
 
-    // Speed and camera movement
     if (cursors.up.isDown) {
         playerSpeed = Math.min(maxSpeed, playerSpeed + accel * dt);
     } else if (cursors.down.isDown) {
@@ -168,7 +158,6 @@ function update(time, delta) {
 
     renderRoadAndObjects.call(this, dt);
 
-    // Track generation
     while (roadSegments.length > 0 && roadSegments[0].z < cameraZ - segmentLength * 2) {
         const oldSegment = roadSegments.shift();
         oldSegment.index = roadSegments[roadSegments.length - 1].index + 1;
@@ -208,7 +197,6 @@ function update(time, delta) {
         roadSegments.push(oldSegment);
     }
 
-    // Object recycling
     for (const obj of roadsideObjects) {
         if (obj.worldZ < cameraZ - segmentLength * 2) {
             obj.worldZ = roadSegments[roadSegments.length - 1].z + (Math.random() * segmentLength * 10);
@@ -314,7 +302,7 @@ function renderRoadAndObjects(dt) {
             for(let k=0; k < roadSegments.length; k++) {
                 const seg = roadSegments[k];
                 if (seg.z >= obj.worldZ) {
-                    if (seg.z < obj.worldZ) { // Corrected condition: was if (seg.z < obj.worldZ) - this caused issues. Should be: if (obj.worldZ > seg.z && obj.worldZ < seg.z + segmentLength)
+                    if (obj.worldZ > seg.z && obj.worldZ < seg.z + segmentLength) { // Interpolate within the current segment
                         const fraction = (obj.worldZ - seg.z) / segmentLength;
                         tempAccumX += seg.curve * fraction;
                         tempAccumY += seg.hill * fraction;
