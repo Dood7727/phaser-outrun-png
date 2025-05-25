@@ -104,7 +104,7 @@ function create() {
 
 
     playerCar = this.add.sprite(this.cameras.main.width / 2, this.cameras.main.height - 80, 'audiR8');
-    playerCar.setScale(0.25);
+    playerCar.setScale(0.2);
     playerCar.setDepth(100);
 
     cursors = this.input.keyboard.createCursorKeys();
