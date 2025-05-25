@@ -66,13 +66,12 @@ const playerXCenterThreshold = 0.15;
 const playerXRumbleThresholdMin = 0.7;
 const playerXRumbleThresholdMax = 1.2;
 
-// --- MODIFICATION: Game State and Lives Variables ---
 let playerLives = 3;
 let livesText;
 let isGameOver = false;
 let gameOverTextObj;
 let playerInvincible = false;
-const invincibilityDuration = 2000; // 2 seconds
+const invincibilityDuration = 2000; 
 let lastHitTime = 0;
 let restartKey;
 
@@ -95,12 +94,6 @@ function create() {
     playerCar = this.add.sprite(config.width / 2, config.height - 80, 'audiR8');
     playerCar.setScale(0.125);
     playerCar.setDepth(100);
-    // Give player car a slightly smaller bounding box for collision to be more forgiving
-    // Note: We are using getBounds() later, so direct physics body might not be needed
-    // if we stick to screen-space collision. For now, this is just for reference.
-    // this.physics.world.enable(playerCar);
-    // playerCar.body.setSize(playerCar.width * 0.7, playerCar.height * 0.8);
-
 
     cursors = this.input.keyboard.createCursorKeys();
     roadGraphics = this.add.graphics();
@@ -113,7 +106,6 @@ function create() {
     });
     scoreText.setScrollFactor(0).setDepth(200);
 
-    // --- MODIFICATION: Initialize Lives Text ---
     playerLives = 3;
     livesText = this.add.text(16, 50, 'Lives: ' + playerLives, {
         fontSize: '24px', fill: '#ffffff', fontFamily: 'Arial, sans-serif',
@@ -121,7 +113,6 @@ function create() {
     });
     livesText.setScrollFactor(0).setDepth(200);
 
-    // --- MODIFICATION: Initialize Game Over Text (hidden) ---
     gameOverTextObj = this.add.text(config.width / 2, config.height / 2, 'GAME OVER\nPress R to Restart', {
         fontSize: '48px', fill: '#ff0000', fontFamily: 'Arial, sans-serif',
         align: 'center', stroke: '#000000', strokeThickness: 6
@@ -132,7 +123,6 @@ function create() {
     playerInvincible = false;
     lastHitTime = 0;
 
-    // Key for restarting
     restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
 
 
@@ -154,7 +144,7 @@ function create() {
             if (isSign) initialObjScale = 0.03 + Math.random() * 0.04;
 
             const newSprite = this.add.sprite(0, 0, spriteKey).setVisible(false).setDepth(50).setOrigin(0.5, 1);
-            newSprite.setData('activeForCollision', true); // Custom flag for collision status
+            newSprite.setData('activeForCollision', true); 
 
             roadsideObjects.push({
                 spriteKey: spriteKey, worldX: side * (1.5 + Math.random() * 2.5),
@@ -169,21 +159,18 @@ function create() {
 function update(time, delta) {
     const dt = delta / 1000;
 
-    // --- MODIFICATION: Game Over and Restart Logic ---
     if (isGameOver) {
         if (Phaser.Input.Keyboard.JustDown(restartKey)) {
-            restartGame.call(this); // Use .call(this) to maintain scene context
+            restartGame.call(this); 
         }
-        return; // Skip main game loop if game over
+        return; 
     }
 
-    // Invincibility check
     if (playerInvincible) {
         if (time > lastHitTime + invincibilityDuration) {
             playerInvincible = false;
-            playerCar.setAlpha(1); // Restore full visibility
+            playerCar.setAlpha(1); 
         } else {
-            // Flash player car
             playerCar.setAlpha(Math.floor(time / 100) % 2 === 0 ? 0.5 : 1);
         }
     }
@@ -232,12 +219,10 @@ function update(time, delta) {
         scoreText.setText('Score: ' + Math.floor(score));
     }
 
-    renderRoadAndObjects.call(this, dt); // Render before collision check for correct bounds
+    renderRoadAndObjects.call(this, dt); 
 
-    // --- MODIFICATION: Collision Detection Loop ---
     if (!playerInvincible) {
         const playerBounds = playerCar.getBounds();
-        // Adjust player bounds to be a bit smaller/more forgiving
         playerBounds.width *= 0.7;
         playerBounds.height *= 0.8;
         playerBounds.centerX = playerCar.x;
@@ -246,10 +231,28 @@ function update(time, delta) {
 
         for (const obj of roadsideObjects) {
             if (obj.sprite.visible && obj.sprite.getData('activeForCollision')) {
-                const objBounds = obj.sprite.getBounds();
-                if (Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, objBounds)) {
-                    handlePlayerHit.call(this, obj.sprite, time); // Pass current time
-                    break; // Only handle one collision per frame
+                let objectCollisionBounds;
+
+                // --- MODIFICATION: Custom collision bounds for trees ---
+                if (obj.spriteKey === 'tree') {
+                    const treeSprite = obj.sprite;
+                    const trunkWidth = treeSprite.displayWidth * 0.20; // 20% of current width for trunk
+                    const trunkHeight = treeSprite.displayHeight * 0.30; // Lower 30% for trunk height
+                    
+                    objectCollisionBounds = new Phaser.Geom.Rectangle(
+                        treeSprite.x - trunkWidth / 2,       // Centered horizontally
+                        treeSprite.y - trunkHeight,          // Positioned at the bottom (origin is 0.5, 1)
+                        trunkWidth,
+                        trunkHeight
+                    );
+                } else { // For signs and other objects, use their regular getBounds()
+                    objectCollisionBounds = obj.sprite.getBounds();
+                }
+                // --- End of tree collision bounds modification ---
+
+                if (Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, objectCollisionBounds)) {
+                    handlePlayerHit.call(this, obj.sprite, time); 
+                    break; 
                 }
             }
         }
@@ -298,41 +301,35 @@ function update(time, delta) {
             obj.sprite.setTexture(obj.spriteKey);
             if (isSign) obj.initialScale = 0.03 + Math.random() * 0.04;
             else obj.initialScale = 0.3 + Math.random() * 0.4;
-            obj.sprite.setVisible(false); // Ensure it's hidden until re-rendered
-            obj.sprite.setData('activeForCollision', true); // Reactivate for collision
+            obj.sprite.setVisible(false); 
+            obj.sprite.setData('activeForCollision', true); 
         }
     }
 }
 
-// --- MODIFICATION: New Helper Functions ---
 function handlePlayerHit(collidedObjectSprite, currentTime) {
-    if (isGameOver) return; // Don't process hits if already game over
+    if (isGameOver) return; 
 
     playerLives--;
     livesText.setText('Lives: ' + playerLives);
 
     playerInvincible = true;
     lastHitTime = currentTime;
-    playerCar.setAlpha(0.5); // Indicate invincibility
+    playerCar.setAlpha(0.5); 
 
-    // "Disable" the collided object to prevent immediate re-collision
-    collidedObjectSprite.setVisible(false); // Hide it
-    collidedObjectSprite.setData('activeForCollision', false); // Mark as no longer collidable
-
-    // Optional: Add a sound effect for collision
-    // this.sound.play('collisionSound');
+    collidedObjectSprite.setVisible(false); 
+    collidedObjectSprite.setData('activeForCollision', false); 
 
     if (playerLives <= 0) {
-        triggerGameOver.call(this); // Use .call(this) to maintain scene context
+        triggerGameOver.call(this); 
     }
 }
 
 function triggerGameOver() {
     isGameOver = true;
-    playerSpeed = 0; // Stop the car
-    horizontalPull = 0; // Stop any sideways pull
+    playerSpeed = 0; 
+    horizontalPull = 0; 
     gameOverTextObj.setVisible(true);
-    // Score is reset when restarting, not immediately on game over display
 }
 
 function restartGame() {
@@ -351,24 +348,16 @@ function restartGame() {
 
     playerInvincible = false;
     playerCar.setAlpha(1);
-    playerCar.x = config.width / 2; // Reset car screen position
+    playerCar.x = config.width / 2; 
 
-    // Reset roadside objects to be active for collision and initially invisible
-    // They will be repositioned by the recycling logic as the game restarts
     for (const obj of roadsideObjects) {
         obj.sprite.setVisible(false);
         obj.sprite.setData('activeForCollision', true);
-        // Force them to be recycled by setting their Z far behind
         obj.worldZ = cameraZ - drawDistance * segmentLength;
     }
-    // Also re-initialize road segments to ensure a fresh start for curves/hills
-    // This is a bit more involved, for now, just resetting cameraZ and letting recycle logic run
-    // For a truly fresh track, you might clear and re-populate roadSegments here.
-    // For simplicity, we'll rely on the existing recycling.
     currentRoadCurveValue = 0;
     curveDirection = 0;
     curveDuration = 0;
-
 
     console.log("Game Restarted");
 }
@@ -469,7 +458,7 @@ function renderRoadAndObjects(dt) {
                 const finalScale = pObj.scale * obj.initialScale * 30;
                 obj.sprite.setScale(finalScale);
                 obj.sprite.setDepth(10 + Math.floor(100000 / pObj.dz) );
-            } else if (obj.sprite.getData('activeForCollision')) { // Only hide if it's still active
+            } else if (obj.sprite.getData('activeForCollision')) { 
                  obj.sprite.setVisible(false);
             }
         } else if (obj.sprite.getData('activeForCollision')) {
