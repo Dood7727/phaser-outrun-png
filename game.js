@@ -105,7 +105,8 @@ function create() {
     sky.displayHeight = this.cameras.main.height;
 
 
-    playerCar = this.add.sprite(this.cameras.main.width / 2, this.cameras.main.height - 80, 'car');
+    // --- MODIFICATION: Car Y position adjusted ---
+    playerCar = this.add.sprite(this.cameras.main.width / 2, this.cameras.main.height - 120, 'car'); // Was -80
     playerCar.setScale(0.2);
     playerCar.setDepth(100);
 
@@ -177,30 +178,23 @@ function create() {
     }
     console.log("Create function complete. Number of roadside objects:", roadsideObjects.length);
 
-    // --- MODIFICATION: Handle window resize ---
     this.scale.on('resize', function (gameSize) {
-        // 'this' inside this callback refers to the ScaleManager, not the Scene.
-        // We need to access the scene's camera and sky object.
-        const scene = game.scene.getScene('default'); // Assuming your scene key is 'default' or get the active scene
+        const scene = game.scene.getScene('default'); 
         if (scene) {
             scene.cameras.main.setSize(gameSize.width, gameSize.height);
-            if (sky) { // Check if sky exists
+            if (sky) { 
                 sky.displayWidth = gameSize.width;
                 sky.displayHeight = gameSize.height;
             }
-            // Re-center game over text if it's visible
             if(gameOverTextObj && gameOverTextObj.visible){
                 gameOverTextObj.setPosition(gameSize.width / 2, gameSize.height / 2);
             }
-            // Re-position player car based on new screen height (if needed, though FIT mode might handle this)
             if(playerCar){
-                 playerCar.y = gameSize.height - 80;
-                 // If not using FIT mode, you might need to adjust playerCar.x as well
-                 // playerCar.x = gameSize.width / 2 + playerX * 60;
+                 // --- MODIFICATION: Car Y position adjusted in resize handler ---
+                 playerCar.y = gameSize.height - 120; // Was -80
             }
         }
     });
-    // Trigger a resize event once at the start to ensure everything is initially scaled correctly
     this.scale.refresh();
 }
 
@@ -208,7 +202,6 @@ function create() {
 function update(time, delta) {
     const dt = delta / 1000;
 
-    // --- MODIFICATION: Use this.cameras.main for width/height references ---
     const screenWidth = this.cameras.main.width;
     const screenHeight = this.cameras.main.height;
 
@@ -252,8 +245,9 @@ function update(time, delta) {
     }
     playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5);
 
-    playerCar.x = screenWidth / 2 + playerX * 60; // Use dynamic screenWidth
-    playerCar.y = screenHeight - 80; // Ensure car stays at bottom relative to screenHeight
+    playerCar.x = screenWidth / 2 + playerX * 60; 
+    // --- MODIFICATION: Car Y position adjusted ---
+    playerCar.y = screenHeight - 120; // Was -80
     playerCar.angle = 0;
 
     if (cursors.up.isDown) playerSpeed = Math.min(maxSpeed, playerSpeed + accel * dt);
@@ -390,7 +384,6 @@ function triggerGameOver() {
     playerSpeed = 0;
     horizontalPull = 0;
     gameOverTextObj.setVisible(true);
-    // --- MODIFICATION: Ensure game over text is centered on resize ---
     gameOverTextObj.setPosition(this.cameras.main.width / 2, this.cameras.main.height / 2);
 }
 
@@ -413,11 +406,10 @@ function project(worldX, worldActualY, worldZ, cameraX, cameraActualY, cameraAct
 
 function renderRoadAndObjects(dt) {
     roadGraphics.clear();
-    // --- MODIFICATION: Use this.cameras.main for width/height references ---
     const screenWidth = this.cameras.main.width;
     const screenHeight = this.cameras.main.height;
 
-    let currentVisualScreenY = screenHeight; // Use dynamic screenHeight
+    let currentVisualScreenY = screenHeight; 
     let accumulatedWorldXOffset = 0;
     let accumulatedWorldYOffset = 0;
 
@@ -429,7 +421,7 @@ function renderRoadAndObjects(dt) {
             accumulatedWorldXOffset - playerX * roadWidthAtScreenBottom * 0.5,
             accumulatedWorldYOffset, segment.z,
             0, cameraHeight, cameraZ,
-            fieldOfView, screenWidth, screenHeight // Use dynamic screenWidth/Height
+            fieldOfView, screenWidth, screenHeight 
         );
         let endOfSegmentWorldX = accumulatedWorldXOffset + segment.curve;
         let endOfSegmentWorldY = accumulatedWorldYOffset + segment.hill;
@@ -437,7 +429,7 @@ function renderRoadAndObjects(dt) {
             (endOfSegmentWorldX - playerX * roadWidthAtScreenBottom * 0.5),
             endOfSegmentWorldY, segment.z + segmentLength,
             0, cameraHeight, cameraZ,
-            fieldOfView, screenWidth, screenHeight // Use dynamic screenWidth/Height
+            fieldOfView, screenWidth, screenHeight 
         );
 
         if (!p1 || !p2 || p1.y < p2.y || p2.y > screenHeight || p1.y < 0 ) {
