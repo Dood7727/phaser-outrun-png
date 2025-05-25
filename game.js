@@ -27,7 +27,8 @@ let roadGraphics; // For drawing the road
 let roadSegments = [];
 let cameraZ = 0; // Player's Z position along the track (world units)
 const segmentLength = 100; // Length of a single road segment in world units
-const roadWidthAtScreenBottom = 2000; // Visual base width of the road
+// --- MODIFICATION: Made road wider ---
+const roadWidthAtScreenBottom = 2400; // Visual base width of the road - Increased from 2000
 const fieldOfView = 100; // Affects perspective scaling
 const cameraHeight = 1000; // Camera height above the road plane (Y=0)
 const drawDistance = 300; // How many segments ahead to process and draw
@@ -43,6 +44,14 @@ let playerX = 0; // Player's horizontal position relative to road center (-1 to 
 // Roadside objects
 const roadsideObjects = [];
 
+// --- MODIFICATION: Variables for curve generation ---
+let currentRoadCurve = 0;
+let curveDirection = 0; // -1 for left, 1 for right, 0 for straight
+let curveDuration = 0; // How many segments the current curve will last
+const maxCurveStrength = 5; // Max curve value
+const minCurveDuration = 50; // Min segments for a curve
+const maxCurveDuration = 200; // Max segments for a curve
+
 // --- Phaser Scene Functions ---
 
 function preload() {
@@ -54,7 +63,6 @@ function preload() {
 }
 
 function create() {
-    // --- MODIFICATION: Make sky fill the screen ---
     let sky = this.add.image(0, 0, 'backgroundSky').setOrigin(0,0).setScrollFactor(0).setDepth(-100);
     sky.displayWidth = config.width;
     sky.displayHeight = config.height;
@@ -72,8 +80,8 @@ function create() {
         roadSegments.push({
             index: i,
             z: i * segmentLength,
-            curve: 0,
-            hill: 0, // This 'hill' value is the Y-offset from the base Y=0 plane
+            curve: 0, // Initial segments are straight
+            hill: 0,
             color: (Math.floor(i / 10) % 2 === 0) ? 0x888888 : 0x777777,
             rumbleColor: isRumbler ? 0xFFFFFF : 0xDD0000,
         });
@@ -92,7 +100,6 @@ function create() {
                 worldX: side * (1.5 + Math.random() * 2.5),
                 worldZ: i * segmentLength + (Math.random() * segmentLength),
                 initialScale: initialObjScale,
-                // --- MODIFICATION: Set origin to bottom-center for roadside objects ---
                 sprite: this.add.sprite(0, 0, spriteKey).setVisible(false).setDepth(50).setOrigin(0.5, 1)
             });
         }
@@ -104,22 +111,26 @@ function update(time, delta) {
     const dt = delta / 1000;
 
     let targetPlayerXInput = 0;
+    // --- MODIFICATION: Reduced targetPlayerXInput for less aggressive side movement ---
     if (cursors.left.isDown) {
-        targetPlayerXInput = -1.5;
+        targetPlayerXInput = -1.0; // Was -1.5
     } else if (cursors.right.isDown) {
-        targetPlayerXInput = 1.5;
+        targetPlayerXInput = 1.0;  // Was 1.5
     }
     playerX = Phaser.Math.Linear(playerX, targetPlayerXInput, 0.1);
 
     if (roadSegments.length > 0) {
         const currentSegmentIndex = Math.floor((cameraZ + cameraHeight) / segmentLength) % roadSegments.length;
-        const currentCurve = roadSegments[currentSegmentIndex]?.curve || 0;
-        playerX -= currentCurve * dt * (playerSpeed / maxSpeed) * 0.05;
+        const currentCurveForCentrifugal = roadSegments[currentSegmentIndex]?.curve || 0;
+        // Adjust centrifugal force based on speed and curve
+        const centrifugalForce = currentCurveForCentrifugal * dt * (playerSpeed / maxSpeed) * 0.05;
+        playerX -= centrifugalForce;
     }
-    playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5);
+    playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5); // Clamp logical position
 
-    playerCar.x = config.width / 2 + playerX * 80;
-    playerCar.angle = playerX * 5;
+    // --- MODIFICATION: Reduced multiplier for car's screen X position ---
+    playerCar.x = config.width / 2 + playerX * 60; // Was 80, car moves less on screen
+    playerCar.angle = playerX * 5; // Tilt remains the same relative to playerX
 
     if (cursors.up.isDown) {
         playerSpeed = Math.min(maxSpeed, playerSpeed + accel * dt);
@@ -138,19 +149,35 @@ function update(time, delta) {
         oldSegment.index = roadSegments[roadSegments.length - 1].index + 1;
         oldSegment.z = roadSegments[roadSegments.length - 1].z + segmentLength;
 
-        if (Math.random() < 0.05) {
-             oldSegment.curve = (Math.random() - 0.5) * (3 + Math.random() * 4);
-             oldSegment.hill = (Math.random() < 0.2) ? (Math.random() - 0.5) * 40 : 0;
-        } else {
-             if (oldSegment.curve !== 0 && Math.random() < 0.2) {
-                oldSegment.curve *= 0.85;
-                if (Math.abs(oldSegment.curve) < 0.1) oldSegment.curve = 0;
-             }
-             if (oldSegment.hill !== 0 && Math.random() < 0.3) {
-                oldSegment.hill *= 0.8;
-                if (Math.abs(oldSegment.hill) < 1) oldSegment.hill = 0;
-             }
+        // --- MODIFICATION: More structured curve generation ---
+        if (curveDuration <= 0) { // Time to decide on a new curve or straight section
+            if (Math.random() < 0.6) { // 60% chance to start a new curve
+                curveDirection = (Math.random() < 0.5) ? -1 : 1; // Left or Right
+                currentRoadCurve = curveDirection * (Math.random() * 0.5 + 0.5) * maxCurveStrength; // Vary strength
+                curveDuration = minCurveDuration + Math.random() * (maxCurveDuration - minCurveDuration);
+            } else { // 40% chance to go straight
+                currentRoadCurve = 0;
+                curveDirection = 0;
+                curveDuration = minCurveDuration / 2 + Math.random() * (maxCurveDuration / 2 - minCurveDuration / 2); // Shorter straight sections
+            }
         }
+
+        if (curveDuration > 0) {
+            oldSegment.curve = currentRoadCurve;
+            curveDuration--;
+        } else {
+            oldSegment.curve = 0; // Default to straight if something goes wrong
+        }
+        // --- End of curve generation modification ---
+
+        // Hills can still be random for now, or integrate with curve logic
+        if (Math.random() < 0.01) { // Less frequent, sharper hills
+             oldSegment.hill = (Math.random() - 0.5) * 60;
+        } else if (oldSegment.hill !== 0 && Math.random() < 0.3) {
+             oldSegment.hill *= 0.8;
+             if (Math.abs(oldSegment.hill) < 1) oldSegment.hill = 0;
+        }
+
 
         const isRumbler = Math.floor(oldSegment.index / 5) % 2 === 0;
         oldSegment.color = (Math.floor(oldSegment.index / 10) % 2 === 0) ? 0x888888 : 0x777777;
@@ -175,21 +202,17 @@ function update(time, delta) {
     }
 }
 
-// Project a 3D world point (worldX, worldY, worldZ) to 2D screen coordinates
-// cameraX, cameraActualY, cameraActualZ are the camera's 3D position
 function project(worldX, worldActualY, worldZ, cameraX, cameraActualY, cameraActualZ, fov, screenWidth, screenHeight) {
     const dx = worldX - cameraX;
-    const dy = worldActualY - cameraActualY; // Difference between point's Y and camera's Y
-    const dz = worldZ - cameraActualZ;       // Distance from camera's Z plane to point's Z plane
+    const dy = worldActualY - cameraActualY;
+    const dz = worldZ - cameraActualZ;
 
-    if (dz <= 0.1) return null; // Point is behind or too close to the camera's near plane
+    if (dz <= 0.1) return null;
 
     const perspectiveFactor = fov / dz;
     const screenX = (screenWidth / 2) + (dx * perspectiveFactor);
-    // Screen Y: positive dy (point is above camera) means screenY moves up (smaller Y value)
-    // negative dy (point is below camera) means screenY moves down (larger Y value)
     const screenY = (screenHeight / 2) - (dy * perspectiveFactor);
-    const scale = perspectiveFactor; // Scale factor for objects at this distance
+    const scale = perspectiveFactor;
 
     return { x: screenX, y: screenY, scale: scale, dz: dz };
 }
@@ -197,60 +220,49 @@ function project(worldX, worldActualY, worldZ, cameraX, cameraActualY, cameraAct
 function renderRoadAndObjects(dt) {
     roadGraphics.clear();
 
-    let currentVisualScreenY = config.height; // Tracks the highest point road reaches on screen (horizon)
-    let accumulatedWorldXOffset = 0; // Current X offset of the road due to curves
-    let accumulatedWorldYOffset = 0; // Current Y offset of the road due to hills (world Y of road surface)
+    let currentVisualScreenY = config.height;
+    let accumulatedWorldXOffset = 0;
+    let accumulatedWorldYOffset = 0;
 
     for (let i = 0; i < drawDistance; i++) {
         const segment = roadSegments[i];
         if (!segment) continue;
 
-        // --- MODIFICATION: Road Projection Logic ---
-        // Project the bottom edge of the current road segment strip
         const p1 = project(
-            accumulatedWorldXOffset - playerX * roadWidthAtScreenBottom * 0.5, // X position of road center, adjusted by player
-            accumulatedWorldYOffset,           // World Y of the road surface at the start of this segment
-            segment.z,                         // World Z of the start of this segment
-            0,                                 // Camera's world X (playerX handles relative view)
-            cameraHeight,                      // Camera's actual world Y
-            cameraZ,                           // Camera's actual world Z
-            fieldOfView, config.width, config.height
-        );
-
-        // Determine the world X and Y for the top edge of this segment strip
-        let topOfSegmentWorldX = accumulatedWorldXOffset + segment.curve * segmentLength * 0.01;
-        let topOfSegmentWorldY = accumulatedWorldYOffset + segment.hill;
-
-        // Project the top edge of the current road segment strip
-        const p2 = project(
-            (topOfSegmentWorldX - playerX * roadWidthAtScreenBottom * 0.5),
-            topOfSegmentWorldY,                // World Y of the road surface at the end of this segment
-            segment.z + segmentLength,         // World Z of the end of this segment
+            accumulatedWorldXOffset - playerX * roadWidthAtScreenBottom * 0.5,
+            accumulatedWorldYOffset,
+            segment.z,
             0, cameraHeight, cameraZ,
             fieldOfView, config.width, config.height
         );
 
-        // Update accumulators for the *next* segment's bottom edge
+        let topOfSegmentWorldX = accumulatedWorldXOffset + segment.curve; // Apply the segment's curve directly
+        let topOfSegmentWorldY = accumulatedWorldYOffset + segment.hill;
+
+        const p2 = project(
+            (topOfSegmentWorldX - playerX * roadWidthAtScreenBottom * 0.5),
+            topOfSegmentWorldY,
+            segment.z + segmentLength,
+            0, cameraHeight, cameraZ,
+            fieldOfView, config.width, config.height
+        );
+
         accumulatedWorldXOffset = topOfSegmentWorldX;
         accumulatedWorldYOffset = topOfSegmentWorldY;
 
-
         if (!p1 || !p2 || p1.y < p2.y || p2.y > config.height || p1.y < 0 ) {
-            // Segment is off-screen, inverted, or behind camera effectively
             continue;
         }
 
         const roadHalfWidthAtP1 = (roadWidthAtScreenBottom / 2) * p1.scale;
         const roadHalfWidthAtP2 = (roadWidthAtScreenBottom / 2) * p2.scale;
 
-        // Draw Road Segment
         roadGraphics.fillStyle(segment.color, 1);
         roadGraphics.fillPoints([
             { x: p1.x - roadHalfWidthAtP1, y: p1.y }, { x: p1.x + roadHalfWidthAtP1, y: p1.y },
             { x: p2.x + roadHalfWidthAtP2, y: p2.y }, { x: p2.x - roadHalfWidthAtP2, y: p2.y }
         ], true);
 
-        // Draw Rumble Strips
         const rumbleWidthRatio = 0.05;
         roadGraphics.fillStyle(segment.rumbleColor, 1);
         roadGraphics.fillPoints([
@@ -265,35 +277,43 @@ function renderRoadAndObjects(dt) {
         currentVisualScreenY = Math.min(currentVisualScreenY, p2.y);
     }
 
-    // --- Render Roadside Objects ---
-    roadsideObjects.sort((a, b) => b.worldZ - a.worldZ); // Draw furthest first
+    roadsideObjects.sort((a, b) => b.worldZ - a.worldZ);
 
     for (const obj of roadsideObjects) {
         const objWorldZRelativeToCamera = obj.worldZ - cameraZ;
 
         if (objWorldZRelativeToCamera > 0.1 && objWorldZRelativeToCamera < drawDistance * segmentLength * 0.8) {
             let roadXOffsetAtObjectZ = 0;
-            let roadYOffsetAtObjectZ = 0; // This will be the world Y of the road surface at object's Z
+            let roadYOffsetAtObjectZ = 0;
 
+            // Accumulate road offsets up to the object's Z position
+            // This needs to be accurate for objects to follow curves/hills correctly
+            let tempAccumulatedX = 0;
+            let tempAccumulatedY = 0;
             for(let k=0; k < roadSegments.length; k++) {
-                if (roadSegments[k].z >= obj.worldZ) break;
-                if (roadSegments[k].z < cameraZ - segmentLength * 2) continue; // Optimization
-                roadXOffsetAtObjectZ += roadSegments[k].curve * segmentLength * 0.01;
-                roadYOffsetAtObjectZ += roadSegments[k].hill;
-            }
+                const seg = roadSegments[k];
+                if (seg.z >= obj.worldZ) break; // Stop if segment is past object
+                // Only accumulate from segments that could affect the current view
+                if (seg.z < cameraZ - segmentLength * 2 && obj.worldZ > seg.z + segmentLength) continue;
 
-            // --- MODIFICATION: Object Projection Logic ---
+                tempAccumulatedX += seg.curve;
+                tempAccumulatedY += seg.hill;
+            }
+            roadXOffsetAtObjectZ = tempAccumulatedX;
+            roadYOffsetAtObjectZ = tempAccumulatedY;
+
+
             const pObj = project(
                 obj.worldX * (roadWidthAtScreenBottom / 2) + roadXOffsetAtObjectZ - playerX * roadWidthAtScreenBottom * 0.5,
-                roadYOffsetAtObjectZ, // World Y of the road surface where object sits
+                roadYOffsetAtObjectZ,
                 obj.worldZ,
                 0, cameraHeight, cameraZ,
                 fieldOfView, config.width, config.height
             );
 
-            if (pObj && pObj.y < config.height + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.8) { // Check if on screen
+            if (pObj && pObj.y < config.height + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.7) { // Adjusted culling slightly
                 obj.sprite.setVisible(true);
-                obj.sprite.setPosition(pObj.x, pObj.y); // Origin (0.5,1) will place bottom-center here
+                obj.sprite.setPosition(pObj.x, pObj.y);
                 const finalScale = pObj.scale * obj.initialScale * 30;
                 obj.sprite.setScale(finalScale);
                 obj.sprite.setDepth(10 + Math.floor(100000 / pObj.dz) );
