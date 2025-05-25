@@ -44,13 +44,13 @@ let horizontalPull = 0;
 const pullIncrement = 0.4;   
 const maxHorizontalPull = 2.0; 
 const sidewaysSpeedFactor = 1.2; 
-// --- MODIFICATION: Increased naturalPullReduction for faster re-centering ---
-const naturalPullReduction = 1.5; // Was 0.1
+const naturalPullReduction = 1.5; 
 
 
 // Roadside objects
 const roadsideObjects = [];
-const objectVerticalOffset = 250; 
+// --- MODIFICATION: Increased objectVerticalOffset significantly ---
+const objectVerticalOffset = 500; // Was 250
 
 // Variables for curve generation
 let currentRoadCurveValue = 0;
