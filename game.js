@@ -88,8 +88,8 @@ let sky; // Make sky a global variable to access it in resize handler
 // --- Phaser Scene Functions ---
 
 function preload() {
-    //this.load.image('audiR8', 'assets/images/audiR8.png');
-    this.load.image('audiR8', 'assets/images/taycan.png');
+    this.load.image('car', 'assets/images/audiR8.png');
+    //this.load.image('car', 'assets/images/taycan.png');
     
     this.load.image('tree', 'assets/images/tree.png');
     this.load.image('backgroundSky', 'assets/images/sky.png');
@@ -105,7 +105,7 @@ function create() {
     sky.displayHeight = this.cameras.main.height;
 
 
-    playerCar = this.add.sprite(this.cameras.main.width / 2, this.cameras.main.height - 80, 'audiR8');
+    playerCar = this.add.sprite(this.cameras.main.width / 2, this.cameras.main.height - 80, 'car');
     playerCar.setScale(0.2);
     playerCar.setDepth(100);
 
