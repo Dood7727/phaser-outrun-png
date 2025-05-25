@@ -34,15 +34,16 @@ const drawDistance = 300; // How many segments ahead to process and draw
 
 // Player state
 let playerSpeed = 0;
-// --- MODIFICATION: Speed values doubled ---
-const maxSpeed = 2400; // Was 1200
-const accel = 800;    // Was 400
-const decel = 600;    // Was 300
-const braking = 1600;  // Was 800
+const maxSpeed = 2400;
+const accel = 800;
+const decel = 600;
+const braking = 1600;
 let playerX = 0; // Player's horizontal position relative to road center (-1 to 1, can extend slightly)
 
 // Roadside objects
 const roadsideObjects = [];
+// --- MODIFICATION: Added constant to adjust object vertical position ---
+const objectVerticalOffset = 150; // Positive values make objects appear lower (sink into ground)
 
 // Variables for curve generation
 let currentRoadCurve = 0;
@@ -121,7 +122,7 @@ function update(time, delta) {
     if (roadSegments.length > 0) {
         const currentSegmentIndex = Math.floor((cameraZ + cameraHeight) / segmentLength) % roadSegments.length;
         const currentCurveForCentrifugal = roadSegments[currentSegmentIndex]?.curve || 0;
-        const centrifugalForce = currentCurveForCentrifugal * dt * (playerSpeed / maxSpeed) * 0.05; // maxSpeed is now higher, so this effect might feel different
+        const centrifugalForce = currentCurveForCentrifugal * dt * (playerSpeed / maxSpeed) * 0.05;
         playerX -= centrifugalForce;
     }
     playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5);
@@ -296,7 +297,8 @@ function renderRoadAndObjects(dt) {
 
             const pObj = project(
                 obj.worldX * (roadWidthAtScreenBottom / 2) + roadXOffsetAtObjectZ - playerX * roadWidthAtScreenBottom * 0.5,
-                roadYOffsetAtObjectZ,
+                // --- MODIFICATION: Apply vertical offset to object's world Y position ---
+                roadYOffsetAtObjectZ - objectVerticalOffset, // Subtracting makes it effectively lower
                 obj.worldZ,
                 0, cameraHeight, cameraZ,
                 fieldOfView, config.width, config.height
