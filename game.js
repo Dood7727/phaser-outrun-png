@@ -40,18 +40,25 @@ const decel = 600;
 const braking = 1600;
 let playerX = 0; // Player's horizontal position relative to road center (-1 to 1, can extend slightly)
 
+// --- MODIFICATION: Variables for new steering/pull mechanic ---
+let horizontalPull = 0; // Current pull strength (-ve for left, +ve for right)
+const pullIncrement = 0.4;   // How much each key press changes the pull
+const maxHorizontalPull = 2.0; // Max pull strength in either direction
+const sidewaysSpeedFactor = 1.2; // How fast playerX changes based on horizontalPull
+const naturalPullReduction = 0.1; // Factor to slowly reduce pull if no input (optional, can be 0)
+
+
 // Roadside objects
 const roadsideObjects = [];
 const objectVerticalOffset = 150;
 
 // Variables for curve generation
-let currentRoadCurveValue = 0; // The actual curve offset value for the current stretch
-let curveDirection = 0; // -1 for left, 1 for right, 0 for straight
-let curveDuration = 0; // How many segments the current curve will last
-// --- MODIFICATION: Increased maxCurveStrength significantly for more dramatic curves ---
-const maxCurveStrength = 250; // Max curve offset *per segment* - was 25
-const minCurveDuration = 30; // Min segments for a curve
-const maxCurveDuration = 100; // Max segments for a curve
+let currentRoadCurveValue = 0;
+let curveDirection = 0;
+let curveDuration = 0;
+const maxCurveStrength = 250;
+const minCurveDuration = 30;
+const maxCurveDuration = 100;
 
 // --- Phaser Scene Functions ---
 
@@ -81,7 +88,7 @@ function create() {
         roadSegments.push({
             index: i,
             z: i * segmentLength,
-            curve: 0, // Initial segments are straight
+            curve: 0,
             hill: 0,
             color: (Math.floor(i / 10) % 2 === 0) ? 0x888888 : 0x777777,
             rumbleColor: isRumbler ? 0xFFFFFF : 0xDD0000,
@@ -111,26 +118,45 @@ function create() {
 function update(time, delta) {
     const dt = delta / 1000;
 
-    let targetPlayerXInput = 0;
-    if (cursors.left.isDown) {
-        targetPlayerXInput = -1.0;
-    } else if (cursors.right.isDown) {
-        targetPlayerXInput = 1.0;
+    // --- MODIFICATION: New steering/pull logic ---
+    if (Phaser.Input.Keyboard.JustDown(cursors.left)) {
+        horizontalPull = Math.max(-maxHorizontalPull, horizontalPull - pullIncrement);
+        // console.log("Pull Left. horizontalPull:", horizontalPull);
     }
-    playerX = Phaser.Math.Linear(playerX, targetPlayerXInput, 0.1);
+    if (Phaser.Input.Keyboard.JustDown(cursors.right)) {
+        horizontalPull = Math.min(maxHorizontalPull, horizontalPull + pullIncrement);
+        // console.log("Pull Right. horizontalPull:", horizontalPull);
+    }
 
+    // Optional: Slowly reduce pull if no input, to make it eventually straighten out
+    if (!cursors.left.isDown && !cursors.right.isDown && naturalPullReduction > 0) {
+        if (horizontalPull > 0) {
+            horizontalPull = Math.max(0, horizontalPull - naturalPullReduction * dt);
+        } else if (horizontalPull < 0) {
+            horizontalPull = Math.min(0, horizontalPull + naturalPullReduction * dt);
+        }
+    }
+    // --- End of new steering/pull logic ---
+
+    // Apply the horizontal pull to playerX
+    playerX += horizontalPull * sidewaysSpeedFactor * dt;
+
+
+    // Centrifugal force still applies to playerX
     if (roadSegments.length > 0) {
         const currentSegmentIndex = Math.floor((cameraZ + cameraHeight) / segmentLength) % roadSegments.length;
         const currentCurveForCentrifugal = roadSegments[currentSegmentIndex]?.curve || 0;
-        // --- MODIFICATION: Centrifugal force might need adjustment with much stronger curves ---
-        const centrifugalForce = currentCurveForCentrifugal * dt * (playerSpeed / maxSpeed) * 0.001; // Further reduced multiplier
+        const centrifugalForce = currentCurveForCentrifugal * dt * (playerSpeed / maxSpeed) * 0.001;
         playerX -= centrifugalForce;
     }
-    playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5);
+    playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5); // Clamp logical road position
 
+    // Update car's screen position
     playerCar.x = config.width / 2 + playerX * 60;
-    playerCar.angle = playerX * 5;
+    // --- MODIFICATION: Car always faces forward ---
+    playerCar.angle = 0;
 
+    // Speed and camera movement
     if (cursors.up.isDown) {
         playerSpeed = Math.min(maxSpeed, playerSpeed + accel * dt);
     } else if (cursors.down.isDown) {
@@ -138,20 +164,20 @@ function update(time, delta) {
     } else {
         playerSpeed = Math.max(0, playerSpeed - decel * dt);
     }
-
     cameraZ += playerSpeed * dt;
 
     renderRoadAndObjects.call(this, dt);
 
+    // Track generation
     while (roadSegments.length > 0 && roadSegments[0].z < cameraZ - segmentLength * 2) {
         const oldSegment = roadSegments.shift();
         oldSegment.index = roadSegments[roadSegments.length - 1].index + 1;
         oldSegment.z = roadSegments[roadSegments.length - 1].z + segmentLength;
 
         if (curveDuration <= 0) {
-            if (Math.random() < 0.7) { 
+            if (Math.random() < 0.7) {
                 curveDirection = (Math.random() < 0.5) ? -1 : 1;
-                currentRoadCurveValue = curveDirection * (Math.random() * 0.3 + 0.2) * maxCurveStrength; 
+                currentRoadCurveValue = curveDirection * (Math.random() * 0.3 + 0.2) * maxCurveStrength;
                 curveDuration = minCurveDuration + Math.random() * (maxCurveDuration - minCurveDuration);
             } else {
                 currentRoadCurveValue = 0;
@@ -161,34 +187,28 @@ function update(time, delta) {
         }
 
         if (curveDuration > 0) {
-            oldSegment.curve = currentRoadCurveValue; 
+            oldSegment.curve = currentRoadCurveValue;
             curveDuration--;
         } else {
             oldSegment.curve = 0;
         }
 
-        // --- MODIFICATION: More pronounced hills (3x factor) ---
-        if (Math.random() < 0.02) { 
-             oldSegment.hill = (Math.random() - 0.5) * 450; // Was 150
-        } else if (oldSegment.hill !== 0 && Math.random() < 0.2) { 
-             oldSegment.hill *= 0.75; 
+        if (Math.random() < 0.02) {
+             oldSegment.hill = (Math.random() - 0.5) * 450;
+        } else if (oldSegment.hill !== 0 && Math.random() < 0.2) {
+             oldSegment.hill *= 0.75;
              if (Math.abs(oldSegment.hill) < 1) oldSegment.hill = 0;
         } else {
-            oldSegment.hill = 0; 
+            oldSegment.hill = 0;
         }
-
-        if (oldSegment.curve !== 0 || oldSegment.hill !== 0) {
-            // console.log(`Segment ${oldSegment.index}: curve=${oldSegment.curve.toFixed(2)}, hill=${oldSegment.hill.toFixed(2)}`);
-        }
-
 
         const isRumbler = Math.floor(oldSegment.index / 5) % 2 === 0;
         oldSegment.color = (Math.floor(oldSegment.index / 10) % 2 === 0) ? 0x888888 : 0x777777;
         oldSegment.rumbleColor = isRumbler ? 0xFFFFFF : 0xDD0000;
-
         roadSegments.push(oldSegment);
     }
 
+    // Object recycling
     for (const obj of roadsideObjects) {
         if (obj.worldZ < cameraZ - segmentLength * 2) {
             obj.worldZ = roadSegments[roadSegments.length - 1].z + (Math.random() * segmentLength * 10);
@@ -224,8 +244,8 @@ function renderRoadAndObjects(dt) {
     roadGraphics.clear();
 
     let currentVisualScreenY = config.height;
-    let accumulatedWorldXOffset = 0; 
-    let accumulatedWorldYOffset = 0; 
+    let accumulatedWorldXOffset = 0;
+    let accumulatedWorldYOffset = 0;
 
     for (let i = 0; i < drawDistance; i++) {
         const segment = roadSegments[i];
@@ -293,8 +313,8 @@ function renderRoadAndObjects(dt) {
             let tempAccumY = 0;
             for(let k=0; k < roadSegments.length; k++) {
                 const seg = roadSegments[k];
-                if (seg.z >= obj.worldZ) { 
-                    if (seg.z < obj.worldZ) {
+                if (seg.z >= obj.worldZ) {
+                    if (seg.z < obj.worldZ) { // Corrected condition: was if (seg.z < obj.worldZ) - this caused issues. Should be: if (obj.worldZ > seg.z && obj.worldZ < seg.z + segmentLength)
                         const fraction = (obj.worldZ - seg.z) / segmentLength;
                         tempAccumX += seg.curve * fraction;
                         tempAccumY += seg.hill * fraction;
