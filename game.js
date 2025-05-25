@@ -29,16 +29,15 @@ let cameraZ = 0; // Player's Z position along the track (world units)
 const segmentLength = 100; // Length of a single road segment in world units
 const roadWidthAtScreenBottom = 2000; // Visual base width of the road
 const fieldOfView = 100; // Affects perspective scaling
-const cameraHeight = 1000; // Camera height above the road plane
+const cameraHeight = 1000; // Camera height above the road plane (Y=0)
 const drawDistance = 300; // How many segments ahead to process and draw
 
 // Player state
 let playerSpeed = 0;
-// --- MODIFICATION: Increased speed and acceleration ---
-const maxSpeed = 1200; // Max speed the player moves along Z axis (world units per second) - Increased
-const accel = 400;    // Acceleration (units per second^2) - Increased
-const decel = 300;    // Natural deceleration (units per second^2)
-const braking = 800;  // Braking deceleration (units per second^2)
+const maxSpeed = 1200;
+const accel = 400;
+const decel = 300;
+const braking = 800;
 let playerX = 0; // Player's horizontal position relative to road center (-1 to 1, can extend slightly)
 
 // Roadside objects
@@ -55,11 +54,13 @@ function preload() {
 }
 
 function create() {
-    this.add.image(config.width / 2, config.height / 2, 'backgroundSky').setScrollFactor(0).setDepth(-100);
+    // --- MODIFICATION: Make sky fill the screen ---
+    let sky = this.add.image(0, 0, 'backgroundSky').setOrigin(0,0).setScrollFactor(0).setDepth(-100);
+    sky.displayWidth = config.width;
+    sky.displayHeight = config.height;
 
     playerCar = this.add.sprite(config.width / 2, config.height - 80, 'audiR8');
-    // --- MODIFICATION: Car size reduced by half ---
-    playerCar.setScale(0.125); // Was 0.25, now half of that
+    playerCar.setScale(0.125);
     playerCar.setDepth(100);
 
     cursors = this.input.keyboard.createCursorKeys();
@@ -72,21 +73,18 @@ function create() {
             index: i,
             z: i * segmentLength,
             curve: 0,
-            hill: 0,
-            // --- MODIFICATION: Lighter road colors for better visibility ---
-            color: (Math.floor(i / 10) % 2 === 0) ? 0x888888 : 0x777777, // Lighter greys
-            rumbleColor: isRumbler ? 0xFFFFFF : 0xDD0000, // White/Red rumblers
+            hill: 0, // This 'hill' value is the Y-offset from the base Y=0 plane
+            color: (Math.floor(i / 10) % 2 === 0) ? 0x888888 : 0x777777,
+            rumbleColor: isRumbler ? 0xFFFFFF : 0xDD0000,
         });
 
         if (i > 10 && i % 15 === 0) {
             const side = (Math.random() > 0.5 ? 1 : -1);
-            const isSign = Math.random() > 0.5; // 50% chance of being a sign
+            const isSign = Math.random() > 0.5;
             const spriteKey = isSign ? 'sign' : 'tree';
-            let initialObjScale = 0.3 + Math.random() * 0.4; // Default for tree
-
-            // --- MODIFICATION: Sign size reduced significantly ---
+            let initialObjScale = 0.3 + Math.random() * 0.4;
             if (isSign) {
-                initialObjScale = 0.03 + Math.random() * 0.04; // Was (0.3 + Math.random() * 0.4), now 1/10th
+                initialObjScale = 0.03 + Math.random() * 0.04;
             }
 
             roadsideObjects.push({
@@ -94,7 +92,8 @@ function create() {
                 worldX: side * (1.5 + Math.random() * 2.5),
                 worldZ: i * segmentLength + (Math.random() * segmentLength),
                 initialScale: initialObjScale,
-                sprite: this.add.sprite(0, 0, spriteKey).setVisible(false).setDepth(50)
+                // --- MODIFICATION: Set origin to bottom-center for roadside objects ---
+                sprite: this.add.sprite(0, 0, spriteKey).setVisible(false).setDepth(50).setOrigin(0.5, 1)
             });
         }
     }
@@ -154,7 +153,6 @@ function update(time, delta) {
         }
 
         const isRumbler = Math.floor(oldSegment.index / 5) % 2 === 0;
-        // --- MODIFICATION: Lighter road colors for better visibility (repeated for recycled segments) ---
         oldSegment.color = (Math.floor(oldSegment.index / 10) % 2 === 0) ? 0x888888 : 0x777777;
         oldSegment.rumbleColor = isRumbler ? 0xFFFFFF : 0xDD0000;
 
@@ -168,7 +166,6 @@ function update(time, delta) {
             const isSign = Math.random() > 0.5;
             obj.spriteKey = isSign ? 'sign' : 'tree';
             obj.sprite.setTexture(obj.spriteKey);
-            // --- MODIFICATION: Sign size reduced (repeated for recycled objects) ---
             if (isSign) {
                 obj.initialScale = 0.03 + Math.random() * 0.04;
             } else {
@@ -178,17 +175,21 @@ function update(time, delta) {
     }
 }
 
-function project(worldX, worldY, worldZ, cameraX, cameraY, cameraZOffset, fov, screenWidth, screenHeight) {
+// Project a 3D world point (worldX, worldY, worldZ) to 2D screen coordinates
+// cameraX, cameraActualY, cameraActualZ are the camera's 3D position
+function project(worldX, worldActualY, worldZ, cameraX, cameraActualY, cameraActualZ, fov, screenWidth, screenHeight) {
     const dx = worldX - cameraX;
-    const dy = worldY - cameraY;
-    const dz = worldZ - cameraZOffset;
+    const dy = worldActualY - cameraActualY; // Difference between point's Y and camera's Y
+    const dz = worldZ - cameraActualZ;       // Distance from camera's Z plane to point's Z plane
 
-    if (dz <= 0.1) return null;
+    if (dz <= 0.1) return null; // Point is behind or too close to the camera's near plane
 
     const perspectiveFactor = fov / dz;
     const screenX = (screenWidth / 2) + (dx * perspectiveFactor);
+    // Screen Y: positive dy (point is above camera) means screenY moves up (smaller Y value)
+    // negative dy (point is below camera) means screenY moves down (larger Y value)
     const screenY = (screenHeight / 2) - (dy * perspectiveFactor);
-    const scale = perspectiveFactor;
+    const scale = perspectiveFactor; // Scale factor for objects at this distance
 
     return { x: screenX, y: screenY, scale: scale, dz: dz };
 }
@@ -196,49 +197,60 @@ function project(worldX, worldY, worldZ, cameraX, cameraY, cameraZOffset, fov, s
 function renderRoadAndObjects(dt) {
     roadGraphics.clear();
 
-    let currentVisualScreenY = config.height;
-    let accumulatedWorldXOffset = 0;
-    let accumulatedWorldYOffset = 0;
+    let currentVisualScreenY = config.height; // Tracks the highest point road reaches on screen (horizon)
+    let accumulatedWorldXOffset = 0; // Current X offset of the road due to curves
+    let accumulatedWorldYOffset = 0; // Current Y offset of the road due to hills (world Y of road surface)
 
     for (let i = 0; i < drawDistance; i++) {
         const segment = roadSegments[i];
         if (!segment) continue;
 
-        const segmentInitialZRelativeToCamera = segment.z - cameraZ;
-        if (segmentInitialZRelativeToCamera < 0.1) continue;
-
+        // --- MODIFICATION: Road Projection Logic ---
+        // Project the bottom edge of the current road segment strip
         const p1 = project(
-            accumulatedWorldXOffset - playerX * roadWidthAtScreenBottom * 0.5,
-            cameraHeight + accumulatedWorldYOffset,
-            segment.z,
-            0, cameraHeight, cameraZ,
+            accumulatedWorldXOffset - playerX * roadWidthAtScreenBottom * 0.5, // X position of road center, adjusted by player
+            accumulatedWorldYOffset,           // World Y of the road surface at the start of this segment
+            segment.z,                         // World Z of the start of this segment
+            0,                                 // Camera's world X (playerX handles relative view)
+            cameraHeight,                      // Camera's actual world Y
+            cameraZ,                           // Camera's actual world Z
             fieldOfView, config.width, config.height
         );
 
-        accumulatedWorldXOffset += segment.curve * segmentLength * 0.01;
-        accumulatedWorldYOffset += segment.hill;
+        // Determine the world X and Y for the top edge of this segment strip
+        let topOfSegmentWorldX = accumulatedWorldXOffset + segment.curve * segmentLength * 0.01;
+        let topOfSegmentWorldY = accumulatedWorldYOffset + segment.hill;
 
+        // Project the top edge of the current road segment strip
         const p2 = project(
-            (accumulatedWorldXOffset - playerX * roadWidthAtScreenBottom * 0.5),
-            cameraHeight + accumulatedWorldYOffset,
-            segment.z + segmentLength,
+            (topOfSegmentWorldX - playerX * roadWidthAtScreenBottom * 0.5),
+            topOfSegmentWorldY,                // World Y of the road surface at the end of this segment
+            segment.z + segmentLength,         // World Z of the end of this segment
             0, cameraHeight, cameraZ,
             fieldOfView, config.width, config.height
         );
+
+        // Update accumulators for the *next* segment's bottom edge
+        accumulatedWorldXOffset = topOfSegmentWorldX;
+        accumulatedWorldYOffset = topOfSegmentWorldY;
+
 
         if (!p1 || !p2 || p1.y < p2.y || p2.y > config.height || p1.y < 0 ) {
+            // Segment is off-screen, inverted, or behind camera effectively
             continue;
         }
 
         const roadHalfWidthAtP1 = (roadWidthAtScreenBottom / 2) * p1.scale;
         const roadHalfWidthAtP2 = (roadWidthAtScreenBottom / 2) * p2.scale;
 
+        // Draw Road Segment
         roadGraphics.fillStyle(segment.color, 1);
         roadGraphics.fillPoints([
             { x: p1.x - roadHalfWidthAtP1, y: p1.y }, { x: p1.x + roadHalfWidthAtP1, y: p1.y },
             { x: p2.x + roadHalfWidthAtP2, y: p2.y }, { x: p2.x - roadHalfWidthAtP2, y: p2.y }
         ], true);
 
+        // Draw Rumble Strips
         const rumbleWidthRatio = 0.05;
         roadGraphics.fillStyle(segment.rumbleColor, 1);
         roadGraphics.fillPoints([
@@ -253,34 +265,36 @@ function renderRoadAndObjects(dt) {
         currentVisualScreenY = Math.min(currentVisualScreenY, p2.y);
     }
 
-    roadsideObjects.sort((a, b) => b.worldZ - a.worldZ);
+    // --- Render Roadside Objects ---
+    roadsideObjects.sort((a, b) => b.worldZ - a.worldZ); // Draw furthest first
 
     for (const obj of roadsideObjects) {
         const objWorldZRelativeToCamera = obj.worldZ - cameraZ;
 
         if (objWorldZRelativeToCamera > 0.1 && objWorldZRelativeToCamera < drawDistance * segmentLength * 0.8) {
             let roadXOffsetAtObjectZ = 0;
-            let roadYOffsetAtObjectZ = 0;
+            let roadYOffsetAtObjectZ = 0; // This will be the world Y of the road surface at object's Z
+
             for(let k=0; k < roadSegments.length; k++) {
                 if (roadSegments[k].z >= obj.worldZ) break;
-                if (roadSegments[k].z < cameraZ - segmentLength) continue;
+                if (roadSegments[k].z < cameraZ - segmentLength * 2) continue; // Optimization
                 roadXOffsetAtObjectZ += roadSegments[k].curve * segmentLength * 0.01;
                 roadYOffsetAtObjectZ += roadSegments[k].hill;
             }
 
+            // --- MODIFICATION: Object Projection Logic ---
             const pObj = project(
                 obj.worldX * (roadWidthAtScreenBottom / 2) + roadXOffsetAtObjectZ - playerX * roadWidthAtScreenBottom * 0.5,
-                cameraHeight + roadYOffsetAtObjectZ,
+                roadYOffsetAtObjectZ, // World Y of the road surface where object sits
                 obj.worldZ,
                 0, cameraHeight, cameraZ,
                 fieldOfView, config.width, config.height
             );
 
-            if (pObj && pObj.y < config.height && pObj.y > currentVisualScreenY * 0.8) {
+            if (pObj && pObj.y < config.height + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.8) { // Check if on screen
                 obj.sprite.setVisible(true);
-                obj.sprite.setPosition(pObj.x, pObj.y);
-                // --- MODIFICATION: Adjusted general object scaling factor for potentially smaller signs ---
-                const finalScale = pObj.scale * obj.initialScale * 30; // Increased multiplier a bit to compensate for very small initialScale of sign
+                obj.sprite.setPosition(pObj.x, pObj.y); // Origin (0.5,1) will place bottom-center here
+                const finalScale = pObj.scale * obj.initialScale * 30;
                 obj.sprite.setScale(finalScale);
                 obj.sprite.setDepth(10 + Math.floor(100000 / pObj.dz) );
             } else {
