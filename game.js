@@ -1,8 +1,15 @@
 // Basic Phaser Configuration
 const config = {
     type: Phaser.AUTO, // Use WebGL if available, otherwise Canvas
-    width: 800,
-    height: 600,
+    // --- MODIFICATION: Set initial width and height to window size ---
+    width: window.innerWidth,
+    height: window.innerHeight,
+    // --- MODIFICATION: Add scale manager configuration ---
+    scale: {
+        mode: Phaser.Scale.FIT, // Or Phaser.Scale.RESIZE, or Phaser.Scale.ENVELOP
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        parent: 'phaser-game-container', // Optional: if you have a specific div for the game
+    },
     physics: {
         default: 'arcade',
         arcade: {
@@ -75,6 +82,8 @@ const invincibilityDuration = 2000;
 let lastHitTime = 0;
 let restartKey;
 
+let sky; // Make sky a global variable to access it in resize handler
+
 
 // --- Phaser Scene Functions ---
 
@@ -87,11 +96,14 @@ function preload() {
 }
 
 function create() {
-    let sky = this.add.image(0, 0, 'backgroundSky').setOrigin(0,0).setScrollFactor(0).setDepth(-100);
-    sky.displayWidth = config.width;
-    sky.displayHeight = config.height;
+    // --- MODIFICATION: Sky initialization and scaling ---
+    sky = this.add.image(0, 0, 'backgroundSky').setOrigin(0,0).setScrollFactor(0).setDepth(-100);
+    // Initial scale to fill
+    sky.displayWidth = this.cameras.main.width;
+    sky.displayHeight = this.cameras.main.height;
 
-    playerCar = this.add.sprite(config.width / 2, config.height - 80, 'audiR8');
+
+    playerCar = this.add.sprite(this.cameras.main.width / 2, this.cameras.main.height - 80, 'audiR8');
     playerCar.setScale(0.125);
     playerCar.setDepth(100);
 
@@ -113,7 +125,7 @@ function create() {
     });
     livesText.setScrollFactor(0).setDepth(200);
 
-    gameOverTextObj = this.add.text(config.width / 2, config.height / 2, 'GAME OVER\nPress R to Restart', {
+    gameOverTextObj = this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2, 'GAME OVER\nPress R to Restart', {
         fontSize: '48px', fill: '#ff0000', fontFamily: 'Arial, sans-serif',
         align: 'center', stroke: '#000000', strokeThickness: 6
     });
@@ -131,8 +143,7 @@ function create() {
         roadSegments.push({
             index: i, z: i * segmentLength, curve: 0, hill: 0,
             color: (Math.floor(i / 10) % 2 === 0) ? 0x888888 : 0x777777,
-            // --- MODIFICATION: Rumble strip color changed to white/grey ---
-            rumbleColor: isRumbler ? 0xFFFFFF : 0xCCCCCC, // Was 0xDD0000 (red)
+            rumbleColor: isRumbler ? 0xFFFFFF : 0xCCCCCC,
             grassColor1: (Math.floor(i / 3) % 2 === 0) ? grassColor : 0x005000,
             grassColor2: (Math.floor(i / 3) % 2 === 0) ? 0x005A00 : grassColor
         });
@@ -163,11 +174,42 @@ function create() {
          });
     }
     console.log("Create function complete. Number of roadside objects:", roadsideObjects.length);
+
+    // --- MODIFICATION: Handle window resize ---
+    this.scale.on('resize', function (gameSize) {
+        // 'this' inside this callback refers to the ScaleManager, not the Scene.
+        // We need to access the scene's camera and sky object.
+        const scene = game.scene.getScene('default'); // Assuming your scene key is 'default' or get the active scene
+        if (scene) {
+            scene.cameras.main.setSize(gameSize.width, gameSize.height);
+            if (sky) { // Check if sky exists
+                sky.displayWidth = gameSize.width;
+                sky.displayHeight = gameSize.height;
+            }
+            // Re-center game over text if it's visible
+            if(gameOverTextObj && gameOverTextObj.visible){
+                gameOverTextObj.setPosition(gameSize.width / 2, gameSize.height / 2);
+            }
+            // Re-position player car based on new screen height (if needed, though FIT mode might handle this)
+            if(playerCar){
+                 playerCar.y = gameSize.height - 80;
+                 // If not using FIT mode, you might need to adjust playerCar.x as well
+                 // playerCar.x = gameSize.width / 2 + playerX * 60;
+            }
+        }
+    });
+    // Trigger a resize event once at the start to ensure everything is initially scaled correctly
+    this.scale.refresh();
 }
 
 
 function update(time, delta) {
     const dt = delta / 1000;
+
+    // --- MODIFICATION: Use this.cameras.main for width/height references ---
+    const screenWidth = this.cameras.main.width;
+    const screenHeight = this.cameras.main.height;
+
 
     if (isGameOver) {
         if (Phaser.Input.Keyboard.JustDown(restartKey)) {
@@ -208,7 +250,8 @@ function update(time, delta) {
     }
     playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5);
 
-    playerCar.x = config.width / 2 + playerX * 60;
+    playerCar.x = screenWidth / 2 + playerX * 60; // Use dynamic screenWidth
+    playerCar.y = screenHeight - 80; // Ensure car stays at bottom relative to screenHeight
     playerCar.angle = 0;
 
     if (cursors.up.isDown) playerSpeed = Math.min(maxSpeed, playerSpeed + accel * dt);
@@ -250,14 +293,14 @@ function update(time, delta) {
                         treeSprite.x - trunkWidth / 2, treeSprite.y - trunkHeight,
                         trunkWidth, trunkHeight
                     );
-                } else { 
+                } else {
                     objectCollisionBounds = obj.sprite.getBounds();
                     if (obj.spriteKey === 'stone') {
-                        objectCollisionBounds.width *= 0.8; 
-                        objectCollisionBounds.height *= 0.6; 
+                        objectCollisionBounds.width *= 0.8;
+                        objectCollisionBounds.height *= 0.6;
                         const stoneSprite = obj.sprite;
                         objectCollisionBounds.centerX = stoneSprite.x;
-                        objectCollisionBounds.centerY = stoneSprite.y - (stoneSprite.displayHeight * (1-0.6) /2) ; 
+                        objectCollisionBounds.centerY = stoneSprite.y - (stoneSprite.displayHeight * (1-0.6) /2) ;
                     }
                 }
                 if (Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, objectCollisionBounds)) {
@@ -294,8 +337,7 @@ function update(time, delta) {
 
         const isRumbler = Math.floor(oldSegment.index / 5) % 2 === 0;
         oldSegment.color = (Math.floor(oldSegment.index / 10) % 2 === 0) ? 0x888888 : 0x777777;
-        // --- MODIFICATION: Rumble strip color changed to white/grey ---
-        oldSegment.rumbleColor = isRumbler ? 0xFFFFFF : 0xCCCCCC; // Was 0xDD0000 (red)
+        oldSegment.rumbleColor = isRumbler ? 0xFFFFFF : 0xCCCCCC;
         oldSegment.grassColor1 = (Math.floor(oldSegment.index / 3) % 2 === 0) ? grassColor : 0x005000;
         oldSegment.grassColor2 = (Math.floor(oldSegment.index / 3) % 2 === 0) ? 0x005A00 : grassColor;
         roadSegments.push(oldSegment);
@@ -346,6 +388,8 @@ function triggerGameOver() {
     playerSpeed = 0;
     horizontalPull = 0;
     gameOverTextObj.setVisible(true);
+    // --- MODIFICATION: Ensure game over text is centered on resize ---
+    gameOverTextObj.setPosition(this.cameras.main.width / 2, this.cameras.main.height / 2);
 }
 
 function restartGame() {
@@ -367,7 +411,11 @@ function project(worldX, worldActualY, worldZ, cameraX, cameraActualY, cameraAct
 
 function renderRoadAndObjects(dt) {
     roadGraphics.clear();
-    let currentVisualScreenY = config.height;
+    // --- MODIFICATION: Use this.cameras.main for width/height references ---
+    const screenWidth = this.cameras.main.width;
+    const screenHeight = this.cameras.main.height;
+
+    let currentVisualScreenY = screenHeight; // Use dynamic screenHeight
     let accumulatedWorldXOffset = 0;
     let accumulatedWorldYOffset = 0;
 
@@ -379,7 +427,7 @@ function renderRoadAndObjects(dt) {
             accumulatedWorldXOffset - playerX * roadWidthAtScreenBottom * 0.5,
             accumulatedWorldYOffset, segment.z,
             0, cameraHeight, cameraZ,
-            fieldOfView, config.width, config.height
+            fieldOfView, screenWidth, screenHeight // Use dynamic screenWidth/Height
         );
         let endOfSegmentWorldX = accumulatedWorldXOffset + segment.curve;
         let endOfSegmentWorldY = accumulatedWorldYOffset + segment.hill;
@@ -387,10 +435,10 @@ function renderRoadAndObjects(dt) {
             (endOfSegmentWorldX - playerX * roadWidthAtScreenBottom * 0.5),
             endOfSegmentWorldY, segment.z + segmentLength,
             0, cameraHeight, cameraZ,
-            fieldOfView, config.width, config.height
+            fieldOfView, screenWidth, screenHeight // Use dynamic screenWidth/Height
         );
 
-        if (!p1 || !p2 || p1.y < p2.y || p2.y > config.height || p1.y < 0 ) {
+        if (!p1 || !p2 || p1.y < p2.y || p2.y > screenHeight || p1.y < 0 ) {
             accumulatedWorldXOffset = endOfSegmentWorldX;
             accumulatedWorldYOffset = endOfSegmentWorldY;
             continue;
@@ -402,7 +450,7 @@ function renderRoadAndObjects(dt) {
         roadGraphics.fillStyle(segment.grassColor1 || grassColor, 1);
         roadGraphics.fillPoints([{ x: 0, y: p1.y }, { x: p1.x - roadHalfWidthAtP1, y: p1.y }, { x: p2.x - roadHalfWidthAtP2, y: p2.y }, { x: 0, y: p2.y }], true);
         roadGraphics.fillStyle(segment.grassColor2 || grassColor, 1);
-        roadGraphics.fillPoints([{ x: p1.x + roadHalfWidthAtP1, y: p1.y }, { x: config.width, y: p1.y }, { x: config.width, y: p2.y }, { x: p2.x + roadHalfWidthAtP2, y: p2.y }], true);
+        roadGraphics.fillPoints([{ x: p1.x + roadHalfWidthAtP1, y: p1.y }, { x: screenWidth, y: p1.y }, { x: screenWidth, y: p2.y }, { x: p2.x + roadHalfWidthAtP2, y: p2.y }], true);
 
         roadGraphics.fillStyle(segment.color, 1);
         roadGraphics.fillPoints([{ x: p1.x - roadHalfWidthAtP1, y: p1.y }, { x: p1.x + roadHalfWidthAtP1, y: p1.y }, { x: p2.x + roadHalfWidthAtP2, y: p2.y }, { x: p2.x - roadHalfWidthAtP2, y: p2.y }], true);
@@ -439,10 +487,10 @@ function renderRoadAndObjects(dt) {
             const pObj = project(
                 obj.worldX * (roadWidthAtScreenBottom / 2) + roadXOffsetAtObjectZ - playerX * roadWidthAtScreenBottom * 0.5,
                 roadYOffsetAtObjectZ - objectVerticalOffset, obj.worldZ,
-                0, cameraHeight, cameraZ, fieldOfView, config.width, config.height
+                0, cameraHeight, cameraZ, fieldOfView, screenWidth, screenHeight // Use dynamic screenWidth/Height
             );
 
-            if (pObj && obj.sprite.getData('activeForCollision') && pObj.y < config.height + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.7) {
+            if (pObj && obj.sprite.getData('activeForCollision') && pObj.y < screenHeight + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.7) {
                 obj.sprite.setVisible(true);
                 obj.sprite.setPosition(pObj.x, pObj.y);
                 const finalScale = pObj.scale * obj.initialScale * 30;
