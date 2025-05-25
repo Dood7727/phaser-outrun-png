@@ -44,13 +44,13 @@ let horizontalPull = 0;
 const pullIncrement = 0.4;   
 const maxHorizontalPull = 2.0; 
 const sidewaysSpeedFactor = 1.2; 
-const naturalPullReduction = 0.1; 
+// --- MODIFICATION: Increased naturalPullReduction for faster re-centering ---
+const naturalPullReduction = 1.5; // Was 0.1
 
 
 // Roadside objects
 const roadsideObjects = [];
-// --- MODIFICATION: Increased objectVerticalOffset to make objects appear lower ---
-const objectVerticalOffset = 250; // Was 150
+const objectVerticalOffset = 250; 
 
 // Variables for curve generation
 let currentRoadCurveValue = 0;
@@ -125,6 +125,7 @@ function update(time, delta) {
         horizontalPull = Math.min(maxHorizontalPull, horizontalPull + pullIncrement);
     }
 
+    // Reduce pull if no input
     if (!cursors.left.isDown && !cursors.right.isDown && naturalPullReduction > 0) {
         if (horizontalPull > 0) {
             horizontalPull = Math.max(0, horizontalPull - naturalPullReduction * dt);
@@ -302,7 +303,7 @@ function renderRoadAndObjects(dt) {
             for(let k=0; k < roadSegments.length; k++) {
                 const seg = roadSegments[k];
                 if (seg.z >= obj.worldZ) {
-                    if (obj.worldZ > seg.z && obj.worldZ < seg.z + segmentLength) { // Interpolate within the current segment
+                    if (obj.worldZ > seg.z && obj.worldZ < seg.z + segmentLength) { 
                         const fraction = (obj.worldZ - seg.z) / segmentLength;
                         tempAccumX += seg.curve * fraction;
                         tempAccumY += seg.hill * fraction;
