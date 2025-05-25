@@ -27,24 +27,24 @@ let roadGraphics; // For drawing the road
 let roadSegments = [];
 let cameraZ = 0; // Player's Z position along the track (world units)
 const segmentLength = 100; // Length of a single road segment in world units
-// --- MODIFICATION: Made road wider ---
-const roadWidthAtScreenBottom = 2400; // Visual base width of the road - Increased from 2000
+const roadWidthAtScreenBottom = 2400; // Visual base width of the road
 const fieldOfView = 100; // Affects perspective scaling
 const cameraHeight = 1000; // Camera height above the road plane (Y=0)
 const drawDistance = 300; // How many segments ahead to process and draw
 
 // Player state
 let playerSpeed = 0;
-const maxSpeed = 1200;
-const accel = 400;
-const decel = 300;
-const braking = 800;
+// --- MODIFICATION: Speed values doubled ---
+const maxSpeed = 2400; // Was 1200
+const accel = 800;    // Was 400
+const decel = 600;    // Was 300
+const braking = 1600;  // Was 800
 let playerX = 0; // Player's horizontal position relative to road center (-1 to 1, can extend slightly)
 
 // Roadside objects
 const roadsideObjects = [];
 
-// --- MODIFICATION: Variables for curve generation ---
+// Variables for curve generation
 let currentRoadCurve = 0;
 let curveDirection = 0; // -1 for left, 1 for right, 0 for straight
 let curveDuration = 0; // How many segments the current curve will last
@@ -111,26 +111,23 @@ function update(time, delta) {
     const dt = delta / 1000;
 
     let targetPlayerXInput = 0;
-    // --- MODIFICATION: Reduced targetPlayerXInput for less aggressive side movement ---
     if (cursors.left.isDown) {
-        targetPlayerXInput = -1.0; // Was -1.5
+        targetPlayerXInput = -1.0;
     } else if (cursors.right.isDown) {
-        targetPlayerXInput = 1.0;  // Was 1.5
+        targetPlayerXInput = 1.0;
     }
     playerX = Phaser.Math.Linear(playerX, targetPlayerXInput, 0.1);
 
     if (roadSegments.length > 0) {
         const currentSegmentIndex = Math.floor((cameraZ + cameraHeight) / segmentLength) % roadSegments.length;
         const currentCurveForCentrifugal = roadSegments[currentSegmentIndex]?.curve || 0;
-        // Adjust centrifugal force based on speed and curve
-        const centrifugalForce = currentCurveForCentrifugal * dt * (playerSpeed / maxSpeed) * 0.05;
+        const centrifugalForce = currentCurveForCentrifugal * dt * (playerSpeed / maxSpeed) * 0.05; // maxSpeed is now higher, so this effect might feel different
         playerX -= centrifugalForce;
     }
-    playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5); // Clamp logical position
+    playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5);
 
-    // --- MODIFICATION: Reduced multiplier for car's screen X position ---
-    playerCar.x = config.width / 2 + playerX * 60; // Was 80, car moves less on screen
-    playerCar.angle = playerX * 5; // Tilt remains the same relative to playerX
+    playerCar.x = config.width / 2 + playerX * 60;
+    playerCar.angle = playerX * 5;
 
     if (cursors.up.isDown) {
         playerSpeed = Math.min(maxSpeed, playerSpeed + accel * dt);
@@ -149,16 +146,15 @@ function update(time, delta) {
         oldSegment.index = roadSegments[roadSegments.length - 1].index + 1;
         oldSegment.z = roadSegments[roadSegments.length - 1].z + segmentLength;
 
-        // --- MODIFICATION: More structured curve generation ---
-        if (curveDuration <= 0) { // Time to decide on a new curve or straight section
-            if (Math.random() < 0.6) { // 60% chance to start a new curve
-                curveDirection = (Math.random() < 0.5) ? -1 : 1; // Left or Right
-                currentRoadCurve = curveDirection * (Math.random() * 0.5 + 0.5) * maxCurveStrength; // Vary strength
+        if (curveDuration <= 0) {
+            if (Math.random() < 0.6) {
+                curveDirection = (Math.random() < 0.5) ? -1 : 1;
+                currentRoadCurve = curveDirection * (Math.random() * 0.5 + 0.5) * maxCurveStrength;
                 curveDuration = minCurveDuration + Math.random() * (maxCurveDuration - minCurveDuration);
-            } else { // 40% chance to go straight
+            } else {
                 currentRoadCurve = 0;
                 curveDirection = 0;
-                curveDuration = minCurveDuration / 2 + Math.random() * (maxCurveDuration / 2 - minCurveDuration / 2); // Shorter straight sections
+                curveDuration = minCurveDuration / 2 + Math.random() * (maxCurveDuration / 2 - minCurveDuration / 2);
             }
         }
 
@@ -166,12 +162,10 @@ function update(time, delta) {
             oldSegment.curve = currentRoadCurve;
             curveDuration--;
         } else {
-            oldSegment.curve = 0; // Default to straight if something goes wrong
+            oldSegment.curve = 0;
         }
-        // --- End of curve generation modification ---
 
-        // Hills can still be random for now, or integrate with curve logic
-        if (Math.random() < 0.01) { // Less frequent, sharper hills
+        if (Math.random() < 0.01) {
              oldSegment.hill = (Math.random() - 0.5) * 60;
         } else if (oldSegment.hill !== 0 && Math.random() < 0.3) {
              oldSegment.hill *= 0.8;
@@ -236,7 +230,7 @@ function renderRoadAndObjects(dt) {
             fieldOfView, config.width, config.height
         );
 
-        let topOfSegmentWorldX = accumulatedWorldXOffset + segment.curve; // Apply the segment's curve directly
+        let topOfSegmentWorldX = accumulatedWorldXOffset + segment.curve;
         let topOfSegmentWorldY = accumulatedWorldYOffset + segment.hill;
 
         const p2 = project(
@@ -286,14 +280,11 @@ function renderRoadAndObjects(dt) {
             let roadXOffsetAtObjectZ = 0;
             let roadYOffsetAtObjectZ = 0;
 
-            // Accumulate road offsets up to the object's Z position
-            // This needs to be accurate for objects to follow curves/hills correctly
             let tempAccumulatedX = 0;
             let tempAccumulatedY = 0;
             for(let k=0; k < roadSegments.length; k++) {
                 const seg = roadSegments[k];
-                if (seg.z >= obj.worldZ) break; // Stop if segment is past object
-                // Only accumulate from segments that could affect the current view
+                if (seg.z >= obj.worldZ) break;
                 if (seg.z < cameraZ - segmentLength * 2 && obj.worldZ > seg.z + segmentLength) continue;
 
                 tempAccumulatedX += seg.curve;
@@ -311,7 +302,7 @@ function renderRoadAndObjects(dt) {
                 fieldOfView, config.width, config.height
             );
 
-            if (pObj && pObj.y < config.height + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.7) { // Adjusted culling slightly
+            if (pObj && pObj.y < config.height + (obj.sprite.height * pObj.scale * obj.initialScale * 30) && pObj.y > currentVisualScreenY * 0.7) {
                 obj.sprite.setVisible(true);
                 obj.sprite.setPosition(pObj.x, pObj.y);
                 const finalScale = pObj.scale * obj.initialScale * 30;
