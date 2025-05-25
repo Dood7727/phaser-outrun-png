@@ -82,7 +82,8 @@ function preload() {
     this.load.image('audiR8', 'assets/images/audiR8.png');
     this.load.image('tree', 'assets/images/tree.png');
     this.load.image('backgroundSky', 'assets/images/sky.png');
-    this.load.image('sign', 'assets/images/sign.png');
+    // --- MODIFICATION: Changed 'sign' to 'stone' ---
+    this.load.image('stone', 'assets/images/stone.png');
     console.log("Preload function complete.");
 }
 
@@ -97,7 +98,7 @@ function create() {
 
     cursors = this.input.keyboard.createCursorKeys();
     roadGraphics = this.add.graphics();
-    roadGraphics.setDepth(1);
+    roadGraphics.setDepth(1); // Road, grass, and rumbles are drawn here
 
     score = 0;
     scoreText = this.add.text(16, 16, 'Score: 0', {
@@ -144,21 +145,21 @@ function create() {
         }
     }
 
-    // --- MODIFICATION: Double the number of initial objects and spread them out ---
-    const numInitialObjects = Math.floor((drawDistance + 50) / 2.5); // Roughly double
+    const numInitialObjects = Math.floor((drawDistance + 50) / 2.5);
     for (let i = 0; i < numInitialObjects ; i++) {
          const side = (Math.random() > 0.5 ? 1 : -1);
-         const isSign = Math.random() > 0.5;
-         const spriteKey = isSign ? 'sign' : 'tree';
-         let initialObjScale = 0.3 + Math.random() * 0.4;
-         if (isSign) initialObjScale = 0.03 + Math.random() * 0.04;
+         // --- MODIFICATION: Changed 'sign' to 'stone' ---
+         const isStone = Math.random() > 0.5;
+         const spriteKey = isStone ? 'stone' : 'tree';
+         let initialObjScale = 0.3 + Math.random() * 0.4; // Default for tree
+         // --- MODIFICATION: Scale for stone (formerly sign) ---
+         if (isStone) initialObjScale = 0.03 + Math.random() * 0.04; // Keep stone small
 
          const newSprite = this.add.sprite(0, 0, spriteKey).setVisible(false).setDepth(50).setOrigin(0.5, 1);
          newSprite.setData('activeForCollision', true);
 
          roadsideObjects.push({
              spriteKey: spriteKey, worldX: side * (1.5 + Math.random() * 2.5),
-             // Spread them along the initial track length
              worldZ: (i * segmentLength * 2.5) + (Math.random() * segmentLength * 2),
              initialScale: initialObjScale, sprite: newSprite
          });
@@ -251,8 +252,17 @@ function update(time, delta) {
                         treeSprite.x - trunkWidth / 2, treeSprite.y - trunkHeight,
                         trunkWidth, trunkHeight
                     );
-                } else {
+                } else { // For stones (formerly signs) and other objects
                     objectCollisionBounds = obj.sprite.getBounds();
+                     // Optional: Make collision box for stones smaller too if needed
+                    if (obj.spriteKey === 'stone') {
+                        objectCollisionBounds.width *= 0.8; // Example: 80% of original width
+                        objectCollisionBounds.height *= 0.6; // Example: 60% of original height
+                        // Recenter bounds if necessary after scaling
+                        const stoneSprite = obj.sprite;
+                        objectCollisionBounds.centerX = stoneSprite.x;
+                        objectCollisionBounds.centerY = stoneSprite.y - (stoneSprite.displayHeight * (1-0.6) /2) ; // Adjust Y if origin is 0.5,1
+                    }
                 }
                 if (Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, objectCollisionBounds)) {
                     handlePlayerHit.call(this, obj.sprite, time);
@@ -294,23 +304,23 @@ function update(time, delta) {
         roadSegments.push(oldSegment);
     }
 
-    // --- MODIFICATION: Object recycling logic adjusted ---
     for (const obj of roadsideObjects) {
-        if (obj.worldZ < cameraZ - segmentLength * 2) { // If object is well behind camera
-            let furthestRoadSegmentZ = 0;
+        if (obj.worldZ < cameraZ - segmentLength * 2) {
+            let maxZ = 0;
             if (roadSegments.length > 0) {
-                furthestRoadSegmentZ = roadSegments[roadSegments.length -1].z;
-            } else { // Should not happen if game is running and roadSegments is populated
-                furthestRoadSegmentZ = cameraZ + (drawDistance - 1) * segmentLength;
+                maxZ = roadSegments[roadSegments.length -1].z;
+            } else {
+                maxZ = cameraZ + drawDistance * segmentLength;
             }
 
-            // Place it a bit ahead of the furthest defined road segment, with some randomness
-            obj.worldZ = furthestRoadSegmentZ + segmentLength + (Math.random() * segmentLength * 4);
-            obj.worldX = (Math.random() > 0.5 ? 1 : -1) * (1.5 + Math.random() * 3.5); // New X
-            const isSign = Math.random() > 0.5;
-            obj.spriteKey = isSign ? 'sign' : 'tree';
+            obj.worldZ = maxZ + segmentLength + (Math.random() * segmentLength * 4);
+            obj.worldX = (Math.random() > 0.5 ? 1 : -1) * (1.5 + Math.random() * 3.5);
+            // --- MODIFICATION: Changed 'sign' to 'stone' ---
+            const isStone = Math.random() > 0.5;
+            obj.spriteKey = isStone ? 'stone' : 'tree';
             obj.sprite.setTexture(obj.spriteKey);
-            if (isSign) obj.initialScale = 0.03 + Math.random() * 0.04;
+            // --- MODIFICATION: Scale for stone (formerly sign) ---
+            if (isStone) obj.initialScale = 0.03 + Math.random() * 0.04;
             else obj.initialScale = 0.3 + Math.random() * 0.4;
             obj.sprite.setVisible(false);
             obj.sprite.setData('activeForCollision', true);
