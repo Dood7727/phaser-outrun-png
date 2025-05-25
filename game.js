@@ -48,8 +48,8 @@ const objectVerticalOffset = 150;
 let currentRoadCurveValue = 0; // The actual curve offset value for the current stretch
 let curveDirection = 0; // -1 for left, 1 for right, 0 for straight
 let curveDuration = 0; // How many segments the current curve will last
-// --- MODIFICATION: Increased maxCurveStrength significantly ---
-const maxCurveStrength = 25; // Max curve offset *per segment* - was 5
+// --- MODIFICATION: Increased maxCurveStrength significantly for more dramatic curves ---
+const maxCurveStrength = 250; // Max curve offset *per segment* - was 25
 const minCurveDuration = 30; // Min segments for a curve
 const maxCurveDuration = 100; // Max segments for a curve
 
@@ -122,7 +122,8 @@ function update(time, delta) {
     if (roadSegments.length > 0) {
         const currentSegmentIndex = Math.floor((cameraZ + cameraHeight) / segmentLength) % roadSegments.length;
         const currentCurveForCentrifugal = roadSegments[currentSegmentIndex]?.curve || 0;
-        const centrifugalForce = currentCurveForCentrifugal * dt * (playerSpeed / maxSpeed) * 0.005; // Reduced centrifugal effect slightly due to higher curve values
+        // --- MODIFICATION: Centrifugal force might need adjustment with much stronger curves ---
+        const centrifugalForce = currentCurveForCentrifugal * dt * (playerSpeed / maxSpeed) * 0.001; // Further reduced multiplier
         playerX -= centrifugalForce;
     }
     playerX = Phaser.Math.Clamp(playerX, -2.5, 2.5);
@@ -148,38 +149,34 @@ function update(time, delta) {
         oldSegment.z = roadSegments[roadSegments.length - 1].z + segmentLength;
 
         if (curveDuration <= 0) {
-            if (Math.random() < 0.7) { // Increased chance of curve
+            if (Math.random() < 0.7) { 
                 curveDirection = (Math.random() < 0.5) ? -1 : 1;
-                // --- MODIFICATION: currentRoadCurveValue is the per-segment delta ---
-                currentRoadCurveValue = curveDirection * (Math.random() * 0.3 + 0.2) * maxCurveStrength; // Curve is a delta-X per segment
+                currentRoadCurveValue = curveDirection * (Math.random() * 0.3 + 0.2) * maxCurveStrength; 
                 curveDuration = minCurveDuration + Math.random() * (maxCurveDuration - minCurveDuration);
-                // console.log(`New curve: dir=${curveDirection}, valPerSeg=${currentRoadCurveValue.toFixed(2)}, duration=${curveDuration.toFixed(0)}`);
             } else {
                 currentRoadCurveValue = 0;
                 curveDirection = 0;
-                curveDuration = minCurveDuration / 3 + Math.random() * (maxCurveDuration / 3 - minCurveDuration / 3); // Shorter straight sections
-                // console.log(`New straight: duration=${curveDuration.toFixed(0)}`);
+                curveDuration = minCurveDuration / 3 + Math.random() * (maxCurveDuration / 3 - minCurveDuration / 3);
             }
         }
 
         if (curveDuration > 0) {
-            oldSegment.curve = currentRoadCurveValue; // Assign the per-segment curve value
+            oldSegment.curve = currentRoadCurveValue; 
             curveDuration--;
         } else {
             oldSegment.curve = 0;
         }
 
-        // --- MODIFICATION: More pronounced hills ---
-        if (Math.random() < 0.02) { // Less frequent, but potentially stronger hills
-             oldSegment.hill = (Math.random() - 0.5) * 150; // Was 60
-        } else if (oldSegment.hill !== 0 && Math.random() < 0.2) { // Smoother return to flat
-             oldSegment.hill *= 0.75; // Faster return to flat
+        // --- MODIFICATION: More pronounced hills (3x factor) ---
+        if (Math.random() < 0.02) { 
+             oldSegment.hill = (Math.random() - 0.5) * 450; // Was 150
+        } else if (oldSegment.hill !== 0 && Math.random() < 0.2) { 
+             oldSegment.hill *= 0.75; 
              if (Math.abs(oldSegment.hill) < 1) oldSegment.hill = 0;
         } else {
-            oldSegment.hill = 0; // Ensure hill is explicitly zeroed if not actively changing
+            oldSegment.hill = 0; 
         }
 
-        // --- MODIFICATION: Added console.log for debugging curve/hill values ---
         if (oldSegment.curve !== 0 || oldSegment.hill !== 0) {
             // console.log(`Segment ${oldSegment.index}: curve=${oldSegment.curve.toFixed(2)}, hill=${oldSegment.hill.toFixed(2)}`);
         }
@@ -227,14 +224,13 @@ function renderRoadAndObjects(dt) {
     roadGraphics.clear();
 
     let currentVisualScreenY = config.height;
-    let accumulatedWorldXOffset = 0; // This is the X offset of the road center at the start of the current segment
-    let accumulatedWorldYOffset = 0; // This is the Y offset of the road center at the start of the current segment
+    let accumulatedWorldXOffset = 0; 
+    let accumulatedWorldYOffset = 0; 
 
     for (let i = 0; i < drawDistance; i++) {
         const segment = roadSegments[i];
         if (!segment) continue;
 
-        // p1 is the projection of the start of the current segment
         const p1 = project(
             accumulatedWorldXOffset - playerX * roadWidthAtScreenBottom * 0.5,
             accumulatedWorldYOffset,
@@ -243,13 +239,9 @@ function renderRoadAndObjects(dt) {
             fieldOfView, config.width, config.height
         );
 
-        // Calculate the world X and Y for the end of the current segment
-        // segment.curve is the deltaX for this segment
-        // segment.hill is the deltaY for this segment
         let endOfSegmentWorldX = accumulatedWorldXOffset + segment.curve;
         let endOfSegmentWorldY = accumulatedWorldYOffset + segment.hill;
 
-        // p2 is the projection of the end of the current segment
         const p2 = project(
             (endOfSegmentWorldX - playerX * roadWidthAtScreenBottom * 0.5),
             endOfSegmentWorldY,
@@ -258,7 +250,6 @@ function renderRoadAndObjects(dt) {
             fieldOfView, config.width, config.height
         );
 
-        // For the next iteration, the start of the next segment is the end of this one
         accumulatedWorldXOffset = endOfSegmentWorldX;
         accumulatedWorldYOffset = endOfSegmentWorldY;
 
@@ -298,14 +289,11 @@ function renderRoadAndObjects(dt) {
             let roadXOffsetAtObjectZ = 0;
             let roadYOffsetAtObjectZ = 0;
 
-            // Recalculate the accumulated X and Y offset of the road at the object's specific Z
-            // This ensures objects are placed correctly along curves and hills.
             let tempAccumX = 0;
             let tempAccumY = 0;
             for(let k=0; k < roadSegments.length; k++) {
                 const seg = roadSegments[k];
-                if (seg.z >= obj.worldZ) { // If the segment starts at or after the object, we've gone far enough
-                    // Interpolate within this segment if obj is between seg.z and seg.z + segmentLength
+                if (seg.z >= obj.worldZ) { 
                     if (seg.z < obj.worldZ) {
                         const fraction = (obj.worldZ - seg.z) / segmentLength;
                         tempAccumX += seg.curve * fraction;
@@ -313,7 +301,6 @@ function renderRoadAndObjects(dt) {
                     }
                     break;
                 }
-                 // Only consider segments that are relevant (not too far behind camera if object is far ahead)
                 if (seg.z < cameraZ - segmentLength * 3 && obj.worldZ > seg.z + segmentLength*2) continue;
 
 
